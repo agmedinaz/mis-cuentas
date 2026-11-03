@@ -1,4 +1,4 @@
-# Mis Cuentas 💜
+# Mis Cuentas
 
 App de finanzas personales. Funciona como **app de escritorio en Windows** (instalador ~5 MB via Tauri) y como **PWA en el celular** (instalable desde el navegador).
 
