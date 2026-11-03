@@ -237,61 +237,74 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
       {/* ── RESUMEN ─────────────────────────────────────────── */}
       {activeTab === 'resumen' && (
         <>
-          {/* Tres grandes números */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
-            <StatBox label="Ingresos" val={fmtARS(calc.ingresosBrutos)} color="#22c55e" />
-            <StatBox label="Gastos"   val={fmtARS(calc.gastosTotales)}  color="#ef4444" />
-            <StatBox label="Te queda" val={fmtARS(calc.presupuesto)}
-              color={calc.presupuesto >= 0 ? '#22c55e' : '#ef4444'} highlight />
+          {/* 3 números grandes */}
+          <div className="stat-grid">
+            <div className="stat-box">
+              <div className="stat-label">Ingresos</div>
+              <div className="stat-val" style={{color:'var(--green)'}}>{fmtARS(calc.ingresosBrutos)}</div>
+            </div>
+            <div className="stat-box">
+              <div className="stat-label">Gastos</div>
+              <div className="stat-val" style={{color:'var(--red)'}}>{fmtARS(calc.gastosTotales)}</div>
+            </div>
+            <div className="stat-box hl">
+              <div className="stat-label">Te queda</div>
+              <div className="stat-val" style={{color: calc.presupuesto>=0 ? 'var(--green)':'var(--red)'}}>
+                {fmtARS(calc.presupuesto)}
+              </div>
+            </div>
           </div>
 
           {/* Barra */}
           <BarraGasto calc={calc} />
 
           {/* Desglose */}
-          <div className="s-card" style={{ marginTop: 10 }}>
-            <SRow label="Ingresos brutos"                          val={fmtARS(calc.ingresosBrutos)}       color="#22c55e" bold />
-            <SRow label={`  Ahorro + libre (${Math.round(calc.pct*100)}%)`} val={`− ${fmtARS(calc.montoAhorroLibre)}`} color="var(--text3)" />
-            <SRow label="  Para gastos"                            val={fmtARS(calc.ingresosParaGastos)}   color="var(--text2)" />
-            <div style={{ borderTop:'1px solid var(--border)', margin:'6px 0' }} />
-            <SRow label="Gastos fijos"    val={`− ${fmtARS(calc.sumaGastosFijosNetos)}`} color="var(--text2)" />
-            <SRow label="Tarjetas"        val={`− ${fmtARS(calc.sumaTarjetas)}`}          color="var(--text2)" />
-            {calc.totalReintegros > 0 && <SRow label="Reintegros" val={`+ ${fmtARS(calc.totalReintegros)}`} color="#22c55e" />}
-            <div style={{ borderTop:'1px solid var(--border)', margin:'6px 0' }} />
-            <SRow label="Te queda" val={fmtARS(calc.presupuesto)}
-              color={calc.presupuesto >= 0 ? '#22c55e' : '#ef4444'} bold />
+          <div className="breakdown">
+            <div className="breakdown-row"><span className="lbl">Ingresos brutos</span><span className="val" style={{color:'var(--green)',fontWeight:700}}>{fmtARS(calc.ingresosBrutos)}</span></div>
+            <div className="breakdown-row indent"><span className="lbl">Ahorro + libre ({Math.round(calc.pct*100)}%)</span><span className="val" style={{color:'var(--text3)'}}>− {fmtARS(calc.montoAhorroLibre)}</span></div>
+            <div className="breakdown-row indent"><span className="lbl">Para gastos</span><span className="val">{fmtARS(calc.ingresosParaGastos)}</span></div>
+            <div className="breakdown-row sep"><span className="lbl">Gastos fijos</span><span className="val">− {fmtARS(calc.sumaGastosFijosNetos)}</span></div>
+            <div className="breakdown-row"><span className="lbl">Tarjetas</span><span className="val">− {fmtARS(calc.sumaTarjetas)}</span></div>
+            {calc.totalReintegros > 0 && <div className="breakdown-row"><span className="lbl">Reintegros</span><span className="val" style={{color:'var(--green)'}}>+ {fmtARS(calc.totalReintegros)}</span></div>}
+            <div className="breakdown-row sep bold"><span className="lbl" style={{fontWeight:700}}>Te queda</span><span className="val" style={{color: calc.presupuesto>=0?'var(--green)':'var(--red)'}}>{fmtARS(calc.presupuesto)}</span></div>
           </div>
 
-          {/* Config */}
-          <div className="s-card" style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Configuración</div>
-            <CfgRow label="% ahorro + libre">
-              <NumInput value={Math.round(sd.pctAhorroLibre * 100)}
-                onChange={v => save({ ...data, pctAhorroLibre: Math.min(1, Math.max(0, v/100)) })}
-                style={{ width: 70 }} />
-              <span style={{ fontSize: 12, color: 'var(--text3)' }}>%</span>
-            </CfgRow>
-            <CfgRow label="Libre (gustitos)">
-              <NumInput value={sd.libreBase} onChange={v => save({ ...data, libreBase: v })} style={{ width: 140 }} />
-            </CfgRow>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
-              Libre disponible: <strong style={{ color: calc.libreDisponible >= 0 ? 'var(--accent3)' : '#ef4444' }}>{fmtARS(calc.libreDisponible)}</strong>
-              {'  '}·{'  '}Ahorro del mes: <strong style={{ color: '#22c55e' }}>{fmtARS(calc.montoAhorro)}</strong>
+          {/* Config inline */}
+          <div className="breakdown" style={{marginBottom:10}}>
+            <div className="breakdown-row">
+              <span className="lbl">% ahorro + libre</span>
+              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                <NumInput value={Math.round(sd.pctAhorroLibre*100)} onChange={v=>save({...data,pctAhorroLibre:Math.min(1,Math.max(0,v/100))})} style={{width:64}}/>
+                <span style={{fontSize:11,color:'var(--text3)'}}>%</span>
+              </div>
+            </div>
+            <div className="breakdown-row">
+              <span className="lbl">Libre (gustitos)</span>
+              <NumInput value={sd.libreBase} onChange={v=>save({...data,libreBase:v})} style={{width:130}}/>
+            </div>
+            <div className="breakdown-row" style={{fontSize:11,color:'var(--text3)'}}>
+              <span>Libre disponible</span>
+              <span style={{color: calc.libreDisponible>=0?'var(--accent3)':'var(--red)', fontWeight:600}}>{fmtARS(calc.libreDisponible)}</span>
+            </div>
+            <div className="breakdown-row" style={{fontSize:11,color:'var(--text3)'}}>
+              <span>Ahorro del mes</span>
+              <span style={{color:'var(--green)',fontWeight:600}}>{fmtARS(calc.montoAhorro)}</span>
             </div>
           </div>
 
-          {/* Tarjetas resumen */}
-          <div className="s-card" style={{ marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Tarjetas</div>
+          {/* Tarjetas mini */}
+          <div className="s-section">
+            <div className="s-section-header">
+              <span className="s-section-title">Tarjetas</span>
+              <span className="s-section-total">{fmtARS(calc.sumaTarjetas)}</span>
+            </div>
             {calc.tarjetasDetalle.map(t => {
               const c = getTarjetaColor(t.nombre)
               return (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', borderRadius: 5, marginBottom: 3, background: `${c.bg}18`, borderLeft: `3px solid ${c.bg}` }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{t.nombre}</span>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtARS(t.total)}</span>
-                    {t.debitos > 0 && <div style={{ fontSize: 10, color: 'var(--text3)' }}>+ {fmtARS(t.debitos)} auto</div>}
-                  </div>
+                <div key={t.id} className="s-row" style={{borderLeft:`3px solid ${c.bg}`, paddingLeft:8}}>
+                  <span style={{flex:1,fontWeight:600}}>{t.nombre}</span>
+                  <span style={{fontWeight:700}}>{fmtARS(t.total)}</span>
+                  {t.debitos>0 && <span style={{fontSize:10,color:'var(--text3)'}}>({fmtARS(t.debitos)} auto)</span>}
                 </div>
               )
             })}
@@ -407,55 +420,24 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
 }
 
 // ── Helpers visuales ─────────────────────────────────────────────────────────
-function StatBox({ label, val, color, highlight }) {
-  return (
-    <div style={{
-      background: highlight ? `${color}14` : 'var(--bg2)',
-      border: `1px solid ${highlight ? color+'44' : 'var(--border)'}`,
-      borderRadius: 8, padding: '10px 12px',
-    }}>
-      <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 800, color, lineHeight: 1.2 }}>{val}</div>
-    </div>
-  )
-}
-function SRow({ label, val, color, bold }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
-      <span style={{ fontSize: 13, color: 'var(--text2)' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: bold ? 700 : 400, color }}>{val}</span>
-    </div>
-  )
-}
-function CfgRow({ label, children }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-      <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>{label}</span>
-      {children}
-    </div>
-  )
-}
 function BarraGasto({ calc }) {
   const total = calc.ingresosBrutos || 1
   const segs = [
-    { l:'Libre',    v:calc.libre,                c:'#6c63ff' },
-    { l:'Ahorro',   v:calc.montoAhorro,          c:'#22c55e' },
-    { l:'Fijos',    v:calc.sumaGastosFijosNetos, c:'#ef4444' },
-    { l:'Tarjetas', v:calc.sumaTarjetas,          c:'#f59e0b' },
+    { l:'Libre',    v:calc.libre,                c:'#7c6fff' },
+    { l:'Ahorro',   v:calc.montoAhorro,          c:'#34c97a' },
+    { l:'Fijos',    v:calc.sumaGastosFijosNetos, c:'#e85555' },
+    { l:'Tarjetas', v:calc.sumaTarjetas,          c:'#e8a020' },
   ].filter(s => s.v > 0)
   const rest = total - segs.reduce((a,s) => a+s.v, 0)
-  if (rest > 0) segs.push({ l:'Disponible', v:rest, c:'#22d3ee' })
+  if (rest > 0) segs.push({ l:'Disponible', v:rest, c:'#2dcbcb' })
   return (
-    <div style={{ marginBottom: 4 }}>
-      <div style={{ display:'flex', height:12, borderRadius:4, overflow:'hidden', marginBottom:6 }}>
-        {segs.map(s => <div key={s.l} style={{ width:`${(s.v/total)*100}%`, background:s.c }} title={`${s.l}: ${fmtARS(s.v)}`} />)}
+    <div style={{marginBottom:10}}>
+      <div className="dist-bar">
+        {segs.map(s => <div key={s.l} style={{width:`${(s.v/total)*100}%`,background:s.c}} title={`${s.l}: ${fmtARS(s.v)}`}/>)}
       </div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'3px 12px' }}>
+      <div className="dist-legend">
         {segs.map(s => (
-          <span key={s.l} style={{ fontSize:11, color:'var(--text3)', display:'flex', alignItems:'center', gap:4 }}>
-            <span style={{ width:7, height:7, borderRadius:2, background:s.c, display:'inline-block' }} />
-            {s.l}: <strong style={{ color:'var(--text2)' }}>{fmtARS(s.v)}</strong>
-          </span>
+          <span key={s.l}><span className="dist-dot" style={{background:s.c}}/>{s.l}: <strong style={{color:'var(--text2)'}}>{fmtARS(s.v)}</strong></span>
         ))}
       </div>
     </div>
@@ -463,28 +445,22 @@ function BarraGasto({ calc }) {
 }
 function FactorRow({ label, factor, monto, color, onChange }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-      <span style={{ fontSize:13, fontWeight:700, color, width:36 }}>{label}</span>
-      <NumInput value={Math.round((factor??0.5)*100)} onChange={onChange} style={{ width:64 }} />
-      <span style={{ fontSize:12, color:'var(--text3)' }}>%</span>
-      <span style={{ fontSize:13, fontWeight:600, color, marginLeft:'auto' }}>{fmtARS(monto)}</span>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+      <span style={{fontSize:13,fontWeight:700,color,width:40}}>{label}</span>
+      <NumInput value={Math.round((factor??0.5)*100)} onChange={onChange} style={{width:60}}/>
+      <span style={{fontSize:11,color:'var(--text3)'}}>%</span>
+      <span style={{fontSize:13,fontWeight:600,color,marginLeft:'auto'}}>{fmtARS(monto)}</span>
     </div>
   )
 }
 
-// ── SectionBlock: bloque con título, drag & drop y botón + ──────────────────
+// ── SectionBlock: grupo compacto con drag & drop ─────────────────────────────
 function SectionBlock({ title, subtitle, total, items, onReorder, onAdd, renderItem }) {
   const dragIdx = useRef(null)
   const [overIdx, setOverIdx] = useState(null)
 
-  function onDragStart(e, i) {
-    dragIdx.current = i
-    e.dataTransfer.effectAllowed = 'move'
-  }
-  function onDragOver(e, i) {
-    e.preventDefault()
-    setOverIdx(i)
-  }
+  function onDragStart(e, i) { dragIdx.current = i; e.dataTransfer.effectAllowed = 'move' }
+  function onDragOver(e, i) { e.preventDefault(); setOverIdx(i) }
   function onDrop(e, i) {
     e.preventDefault()
     if (dragIdx.current === null || dragIdx.current === i) { reset(); return }
@@ -497,36 +473,32 @@ function SectionBlock({ title, subtitle, total, items, onReorder, onAdd, renderI
   function reset() { dragIdx.current = null; setOverIdx(null) }
 
   return (
-    <div className="s-card" style={{ marginBottom: 10 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-        <div>
-          <span style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{title}</span>
-          {subtitle && <span style={{ fontSize:11, color:'var(--text3)', marginLeft:8 }}>{subtitle}</span>}
+    <div className="s-section">
+      <div className="s-section-header">
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span className="s-section-title">{title}</span>
+          {subtitle && <span style={{fontSize:11,color:'var(--text3)'}}>{subtitle}</span>}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <span style={{ fontSize:13, fontWeight:700, color:'#22c55e' }}>{total}</span>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span className="s-section-total" style={{color:'var(--green)'}}>{total}</span>
           <button className="s-add-btn" onClick={onAdd}>+</button>
         </div>
       </div>
       {items.map((item, i) => (
-        <div key={item.id}
-          draggable
-          onDragStart={e => onDragStart(e, i)}
-          onDragOver={e => onDragOver(e, i)}
-          onDrop={e => onDrop(e, i)}
-          onDragEnd={reset}
+        <div key={item.id} draggable
+          onDragStart={e => onDragStart(e,i)} onDragOver={e => onDragOver(e,i)}
+          onDrop={e => onDrop(e,i)} onDragEnd={reset}
           style={{
-            display:'flex', alignItems:'center', gap:6,
-            borderTop: i === 0 ? '1px solid var(--border)' : 'none',
-            borderBottom: overIdx === i ? '2px solid var(--accent)' : '1px solid var(--border)',
-            opacity: dragIdx.current === i ? 0.4 : 1,
+            display:'flex', alignItems:'center', gap:4,
+            borderBottom: overIdx===i ? '2px solid var(--accent)' : '1px solid var(--border)',
+            opacity: dragIdx.current===i ? 0.35 : 1,
           }}
         >
-          <GripVertical size={13} style={{ color:'var(--text3)', flexShrink:0, cursor:'grab' }} />
-          <div style={{ flex:1 }}>{renderItem(item)}</div>
+          <GripVertical size={12} style={{color:'var(--text3)',flexShrink:0,cursor:'grab'}}/>
+          <div style={{flex:1}}>{renderItem(item)}</div>
         </div>
       ))}
-      {items.length === 0 && <div style={{ fontSize:12, color:'var(--text3)', padding:'4px 0' }}>—</div>}
+      {items.length===0 && <div style={{fontSize:11,color:'var(--text3)',padding:'3px 0'}}>—</div>}
     </div>
   )
 }
