@@ -289,22 +289,77 @@ function calcProyeccion(data, gastosFijosNetos, ingresosBrutos, apartado, libreB
 export function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 function sumList(arr, key) { return (arr || []).reduce((acc, i) => acc + (parseFloat(i[key]) || 0), 0) }
 
+// ── Formateo de moneda ────────────────────────────────────────────────────────
+// Formato: separador de miles = punto, decimal = coma, prefijo = "ARS " o "USD "
+// Ejemplos: 150000 → "ARS 150.000"   0.5 → "ARS 0,50"   1234567.89 → "ARS 1.234.567,89"
+const FMT_ARS = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+const FMT_USD = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 export function fmtARS(n) {
-  if (n === null || n === undefined || isNaN(n)) return '$0'
-  return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
+  if (n === null || n === undefined || isNaN(n)) return 'ARS 0'
+  return 'ARS\u00a0' + FMT_ARS.format(n)   // \u00a0 = espacio no separable
 }
 export function fmtUSD(n) {
-  if (!n || isNaN(n)) return 'USD 0'
-  return 'USD ' + new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+  if (n === null || n === undefined || isNaN(n)) return 'USD 0,00'
+  return 'USD\u00a0' + FMT_USD.format(n)
 }
+
 export function monthName(m) {
   return ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][m-1] || ''
 }
-// Evalúa expresiones simples: "70000/2", "30000+5000", etc.
+
+// ── Evaluador de expresiones ──────────────────────────────────────────────────
+// Acepta tanto "," como "." como separador decimal (y "." como separador de miles).
+// Regla: si hay un punto Y una coma, el punto es miles y la coma es decimal.
+//        si solo hay coma, es decimal.
+//        si solo hay punto:
+//          - si está seguido de exactamente 3 dígitos al final → es miles → se elimina
+//          - si no (ej: 1550.5) → es decimal → se convierte a coma
+// Ejemplos:
+//   "1.550"      → 1550
+//   "1.550,50"   → 1550.50
+//   "1550,5"     → 1550.5
+//   "1550.5"     → 1550.5
+//   "70000/2"    → 35000
+//   "30.000/2"   → 15000
 export function evalExpr(str) {
   if (str === '' || str === null || str === undefined) return 0
-  const s = String(str).replace(/\./g, '').replace(/,/g, '.').trim()
+  let s = String(str).trim()
+
+  // Separar tokens de una expresión (números y operadores)
+  // Para cada token numérico, normalizar al formato JS (punto decimal)
+  s = s.replace(/[\d.,]+/g, token => normalizeNumber(token))
+
+  // Ahora s tiene solo dígitos, punto decimal JS, y operadores +−*/()
   if (!/^[\d\s+\-*/().]+$/.test(s)) return parseFloat(s) || 0
-  try { return Function('"use strict"; return (' + s + ')')() || 0 }
-  catch { return parseFloat(s) || 0 }
+  try {
+    const result = Function('"use strict"; return (' + s + ')')()
+    return typeof result === 'number' && isFinite(result) ? result : 0
+  } catch { return parseFloat(s) || 0 }
+}
+
+// Convierte un token numérico argentino a número JS
+function normalizeNumber(token) {
+  const hasDot   = token.includes('.')
+  const hasComma = token.includes(',')
+
+  if (hasDot && hasComma) {
+    // Formato miles.decimal: "1.234.567,89" → "1234567.89"
+    return token.replace(/\./g, '').replace(',', '.')
+  }
+  if (hasComma && !hasDot) {
+    // Solo coma → decimal: "1550,5" → "1550.5"
+    return token.replace(',', '.')
+  }
+  if (hasDot && !hasComma) {
+    // Solo punto: ¿miles o decimal?
+    const afterDot = token.split('.').pop()
+    if (afterDot.length === 3) {
+      // "1.550" → miles → eliminar punto
+      return token.replace(/\./g, '')
+    }
+    // "1550.5" → decimal → dejar como está
+    return token
+  }
+  return token  // sin separadores, número limpio
 }
