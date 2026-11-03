@@ -292,27 +292,25 @@ function FilaTotal({ label, valor, positivo }) {
   )
 }
 
-// ── Generación PDF con la API nativa del navegador ────────────────────────────
+// ── Generación PDF ─────────────────────────────────────────────────────────
+// Descarga un archivo .html que al abrirse y hacer Ctrl+P / Guardar como PDF
+// produce el informe. Es el método más confiable cross-browser sin librerías.
 async function generarYDescargarPDF(datosSeleccionados) {
-  // Construimos HTML completo del PDF
   const html = buildPDFHTML(datosSeleccionados)
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url  = URL.createObjectURL(blob)
 
-  // Abrimos una ventana oculta, metemos el HTML, y mandamos a imprimir
-  const win = window.open('', '_blank', 'width=900,height=700')
-  if (!win) throw new Error('El navegador bloqueó la ventana emergente. Permitila para poder descargar el PDF.')
+  const a = document.createElement('a')
+  const primerMes = datosSeleccionados[0]
+  const ultimoMes = datosSeleccionados[datosSeleccionados.length - 1]
+  const nombre = datosSeleccionados.length === 1
+    ? `MisCuentas_${primerMes.meta.year}-${String(primerMes.meta.month).padStart(2,'0')}.html`
+    : `MisCuentas_${primerMes.meta.year}-${String(primerMes.meta.month).padStart(2,'0')}_a_${ultimoMes.meta.year}-${String(ultimoMes.meta.month).padStart(2,'0')}.html`
 
-  win.document.write(html)
-  win.document.close()
-
-  // Esperamos que cargue y luego print
-  await new Promise(resolve => {
-    win.onload = resolve
-    setTimeout(resolve, 800)
-  })
-
-  win.print()
-  // Cerramos después de print
-  setTimeout(() => win.close(), 1000)
+  a.href     = url
+  a.download = nombre
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
 }
 
 function buildPDFHTML(datos) {

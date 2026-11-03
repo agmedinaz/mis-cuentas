@@ -149,13 +149,14 @@ export default function GastosFijosSection({ gastosFijos, tarjetas, onChange, do
                 {/* Cabecera columnas */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: '20px 1fr 130px 140px 24px',
+                  gridTemplateColumns: '20px 1fr 110px 48px 140px 24px',
                   gap: 6, marginBottom: 4, padding: '0 4px',
                   fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase',
                 }}>
                   <span />
                   <span>Concepto</span>
-                  <span style={{ textAlign: 'right' }}>{grupo === 'Streaming' ? 'USD' : 'ARS'}</span>
+                  <span style={{ textAlign: 'right' }}>Monto</span>
+                  <span style={{ textAlign: 'center' }}>Mon.</span>
                   <span style={{ textAlign: 'center' }}>Débito auto</span>
                   <span />
                 </div>
@@ -177,7 +178,7 @@ export default function GastosFijosSection({ gastosFijos, tarjetas, onChange, do
                       onDragEnd={handleDragEnd}
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: '20px 1fr 130px 140px 24px',
+                        gridTemplateColumns: '20px 1fr 110px 48px 140px 24px',
                         gap: 6, alignItems: 'center',
                         padding: '5px 4px', borderRadius: 6, marginBottom: 3,
                         background: color ? `${color.bg}22` : 'transparent',
@@ -226,6 +227,19 @@ export default function GastosFijosSection({ gastosFijos, tarjetas, onChange, do
                         )}
                       </div>
 
+                      {/* Toggle ARS / USD */}
+                      <button
+                        onMouseDown={e => e.stopPropagation()}
+                        onClick={() => updateItem(item.id, 'usd', !item.usd)}
+                        style={{
+                          padding: '4px 6px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                          fontSize: 11, fontWeight: 700,
+                          background: item.usd ? 'rgba(245,158,11,.2)' : 'var(--bg4)',
+                          color: item.usd ? 'var(--yellow)' : 'var(--text3)',
+                          width: '100%',
+                        }}
+                      >{item.usd ? 'USD' : 'ARS'}</button>
+
                       {/* Débito auto */}
                       <select
                         value={item.debitoAuto || ''}
@@ -233,8 +247,9 @@ export default function GastosFijosSection({ gastosFijos, tarjetas, onChange, do
                         onMouseDown={e => e.stopPropagation()}
                         style={{
                           fontSize: 11, padding: '4px 6px',
-                          background: color ? `${color.bg}33` : 'var(--bg3)',
-                          color: color ? color.text : 'var(--text2)',
+                          background: color ? color.bg : 'var(--bg3)',
+                          color: color ? '#fff' : 'var(--text2)',
+                          fontWeight: color ? 700 : 400,
                           border: `1px solid ${color ? color.border : 'var(--border)'}`,
                           borderRadius: 6, width: '100%', cursor: 'pointer',
                         }}

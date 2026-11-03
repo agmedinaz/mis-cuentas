@@ -4,24 +4,42 @@ import { loadSavings, saveSavings, fmtARS, fmtUSD, uid } from '../store'
 import NumInput from './NumInput'
 
 // Cotización YPF en BYMA (pesos argentinos)
+// Usamos Yahoo Finance que es el más confiable sin API key
 async function fetchYPF() {
   const APIS = [
-    { url: 'https://api.argentinadatos.com/v1/cotizaciones/acciones/YPF', parse: d => d?.[d.length-1]?.cierre || d?.[d.length-1]?.precio },
-    { url: 'https://query1.finance.yahoo.com/v8/finance/chart/YPFD.BA?range=1d&interval=1d', parse: d => d?.chart?.result?.[0]?.meta?.regularMarketPrice },
+    // Yahoo Finance — YPFD.BA es YPF en BYMA (Buenos Aires)
+    {
+      url: 'https://query1.finance.yahoo.com/v8/finance/chart/YPFD.BA?range=1d&interval=1d&includePrePost=false',
+      parse: d => d?.chart?.result?.[0]?.meta?.regularMarketPrice
+             || d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.find(Boolean),
+    },
+    // Alternativa con query2
+    {
+      url: 'https://query2.finance.yahoo.com/v8/finance/chart/YPFD.BA?range=1d&interval=1d',
+      parse: d => d?.chart?.result?.[0]?.meta?.regularMarketPrice,
+    },
+    // Stooq como tercer fallback
+    {
+      url: 'https://stooq.com/q/l/?s=ypfd.ba&f=sd2t2ohlcv&e=json',
+      parse: d => d?.symbols?.[0]?.close,
+    },
   ]
   for (const api of APIS) {
     try {
-      const r = await window.fetch(api.url, { signal: AbortSignal.timeout(6000) })
+      const r = await window.fetch(api.url, {
+        signal: AbortSignal.timeout(8000),
+        headers: { 'Accept': 'application/json' },
+      })
       if (!r.ok) continue
       const data = await r.json()
       const val = api.parse(data)
-      if (val && val > 0) return val
+      if (val && val > 0) return parseFloat(val)
     } catch {}
   }
   return null
 }
 
-export default function AhorrosPanel({ dolarCompra = 0, dolarVenta = 0 }) {
+export default function AhorrosPanel({ dolarCompra = 0, dolarVenta = 0, ahorroMes = 0, factorUSD = 0.5, factorYPF = 0.5 }) {
   const [savings, setSavings] = useState(loadSavings())
   const [ypfPrecio, setYpfPrecio] = useState(null)
   const [loadingYPF, setLoadingYPF] = useState(false)
@@ -94,6 +112,31 @@ export default function AhorrosPanel({ dolarCompra = 0, dolarVenta = 0 }) {
           <Plus size={13} /> Movimiento
         </button>
       </div>
+
+      {/* Sugerencia del mes */}
+      {ahorroMes > 0 && (
+        <div style={{ background: 'rgba(34,197,94,.08)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Sugerencia para este mes</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--yellow)' }}>
+            <span>Comprar USD ({Math.round(factorUSD * 100)}%)</span>
+            <span style={{ fontWeight: 700 }}>
+              {fmtARS(ahorroMes * factorUSD)}
+              {dolarVenta > 0 && <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 4 }}>
+                ≈ {fmtUSD(ahorroMes * factorUSD / dolarVenta)}
+              </span>}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent3)', marginTop: 3 }}>
+            <span>Comprar YPF ({Math.round(factorYPF * 100)}%)</span>
+            <span style={{ fontWeight: 700 }}>
+              {fmtARS(ahorroMes * factorYPF)}
+              {ypfPrecio > 0 && <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 4 }}>
+                ≈ {((ahorroMes * factorYPF) / ypfPrecio).toFixed(1)} acc.
+              </span>}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Total en pesos */}
       <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', borderBottom: '1px solid rgba(34,197,94,.2)' }}>
