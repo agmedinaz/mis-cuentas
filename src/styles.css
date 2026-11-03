@@ -485,3 +485,33 @@ input.inline:focus { border-color: var(--accent); }
 .toast.success { border-color: var(--green); color: var(--green); }
 .toast.error { border-color: var(--red); color: var(--red); }
 @keyframes slideIn { from { transform: translateX(60px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ── Minimalista s- classes ──────────────────────────────────────────────── */
+.s-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.s-add-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text3);
+  font-size: 16px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all .15s;
+  padding: 0;
+  line-height: 1;
+}
+.s-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent3);
+  background: rgba(108,99,255,.08);
+}

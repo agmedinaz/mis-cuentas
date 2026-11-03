@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, RefreshCcw, TrendingUp, CreditCard, Home } from 'lucide-react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Plus, Trash2, RefreshCcw, TrendingUp, CreditCard, GripVertical } from 'lucide-react'
 import {
   loadMonth, saveMonth, calcMonth, fmtARS, fmtUSD, uid,
-  loadPendingPurchases, monthName, getTarjetaColor,
+  loadPendingPurchases, monthName, getTarjetaColor, listMonths,
 } from '../store'
 import TarjetaSection from '../components/TarjetaSection'
 import GastosFijosSection from '../components/GastosFijosSection'
@@ -11,27 +11,8 @@ import AhorrosPanel from '../components/AhorrosPanel'
 import DolarWidget, { useDolar } from '../components/DolarWidget'
 import NumInput from '../components/NumInput'
 
-// ── Selector moneda inline ────────────────────────────────────────────────────
-function MonedaToggle({ usd, onChange }) {
-  return (
-    <button
-      onClick={() => onChange(!usd)}
-      title={usd ? 'Cambiar a ARS' : 'Cambiar a USD'}
-      style={{
-        padding: '3px 8px', borderRadius: 4, border: 'none', cursor: 'pointer',
-        fontSize: 11, fontWeight: 700, lineHeight: 1,
-        background: usd ? 'rgba(245,158,11,.2)' : 'var(--bg4)',
-        color: usd ? 'var(--yellow)' : 'var(--text3)',
-        transition: 'all .15s', whiteSpace: 'nowrap', flexShrink: 0,
-      }}
-    >
-      {usd ? 'USD' : 'ARS'}
-    </button>
-  )
-}
-
 export default function MonthEditor({ monthId, onRefresh, toast }) {
-  const [data, setData]     = useState(null)
+  const [data, setData]       = useState(null)
   const [pending, setPending] = useState([])
   const [activeTab, setActiveTab] = useState('resumen')
   const { compra: dolarCompra, venta: dolarVenta, loading: dolarLoading,
@@ -49,52 +30,70 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
     onRefresh()
   }, [onRefresh])
 
-  const set = (key, val) => save({ ...data, [key]: val })
-
-  function updateInItem(listKey, id, field, value) {
-    save({ ...data, [listKey]: data[listKey].map(i => i.id === id ? { ...i, [field]: value } : i) })
+  function updateListItem(listKey, id, field, value) {
+    save({ ...data, [listKey]: (data[listKey] || []).map(i => i.id === id ? { ...i, [field]: value } : i) })
   }
-  function addIn(listKey, defaults = {}) {
+  function addToList(listKey, defaults = {}) {
     save({ ...data, [listKey]: [...(data[listKey] || []), { id: uid(), concepto: '', monto: 0, usd: false, ...defaults }] })
   }
-  function removeFrom(listKey, id) {
-    save({ ...data, [listKey]: data[listKey].filter(i => i.id !== id) })
+  function removeFromList(listKey, id) {
+    save({ ...data, [listKey]: (data[listKey] || []).filter(i => i.id !== id) })
+  }
+  function reorderList(listKey, newList) {
+    save({ ...data, [listKey]: newList })
   }
   function updateTarjeta(tid, changes) {
     save({ ...data, tarjetas: data.tarjetas.map(t => t.id === tid ? { ...t, ...changes } : t) })
   }
+  function deleteMonth() {
+    if (!window.confirm(`¿Eliminar ${monthName(data.month)} ${data.year}? Esta acción no se puede deshacer.`)) return
+    localStorage.removeItem('mc_' + data.id)
+    onRefresh()
+    window.location.reload()
+  }
 
   if (!data) return <div style={{ padding: 24, color: 'var(--text3)' }}>Cargando…</div>
 
-  // Asegurar campos nuevos si el mes fue creado con versión anterior
-  const safeData = {
+  const sd = {  // safeData — compatibilidad con datos viejos
     ingresosFijos:  data.ingresosFijos  || data.ingresos || [],
     ingresosExtras: data.ingresosExtras || [],
     reintegros:     data.reintegros     || [],
+    gastosFijos:    data.gastosFijos    || [],
+    otrosGastos:    data.otrosGastos    || [],
+    tarjetas:       data.tarjetas       || [],
     pctAhorroLibre: data.pctAhorroLibre ?? data.apartado ?? 0.23,
     factorUSD:      data.factorUSD      ?? 0.5,
     factorYPF:      data.factorYPF      ?? 0.5,
+    libreBase:      data.libreBase      ?? 0,
     ...data,
   }
 
-  const venta  = dolarVenta  || safeData.dolarVenta  || 0
-  const compra = dolarCompra || safeData.dolarCompra || 0
-  const calc   = calcMonth(safeData, pending, venta, compra)
+  const venta  = dolarVenta  || sd.dolarVenta  || 0
+  const compra = dolarCompra || sd.dolarCompra || 0
+  const calc   = calcMonth(sd, pending, venta, compra)
 
   const tabs = [
-    { key: 'resumen',  label: 'Resumen' },
+    { key: 'resumen',  label: 'Resumen'  },
     { key: 'ingresos', label: 'Ingresos' },
-    { key: 'fijos',    label: 'Gastos fijos' },
+    { key: 'gastos',   label: 'Gastos'   },
     { key: 'tarjetas', label: 'Tarjetas' },
-    { key: 'ahorros',  label: 'Ahorros' },
+    { key: 'ahorros',  label: 'Ahorros'  },
   ]
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+      {/* Top bar dólar + eliminar mes */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <DolarWidget compra={compra} venta={venta}
           loading={dolarLoading} lastUpdate={lastUpdate}
           error={dolarError} onRefresh={refreshDolar} compact />
+        <button onClick={deleteMonth} style={{
+          background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+          color: 'var(--text3)', fontSize: 12, padding: '4px 10px', cursor: 'pointer',
+        }}>
+          <Trash2 size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+          Eliminar mes
+        </button>
       </div>
 
       <div className="tabs">
@@ -107,192 +106,123 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
       {/* ── RESUMEN ─────────────────────────────────────────── */}
       {activeTab === 'resumen' && (
         <>
-          {/* ── Balance principal ── */}
-          <div className="card">
-            <div className="card-title"><div className="card-title-left">Balance del mes</div></div>
-
-            {/* Grandes números arriba */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
-              <BigStat label="Ingresos" val={fmtARS(calc.ingresosBrutos)} color="var(--green)" />
-              <BigStat label="Gastos totales" val={fmtARS(calc.gastosTotales)} color="var(--red)" />
-              <BigStat
-                label="Lo que te queda"
-                val={fmtARS(calc.presupuesto)}
-                color={calc.presupuesto >= 0 ? 'var(--green)' : 'var(--red)'}
-                highlight
-              />
-            </div>
-
-            {/* Barra de distribución */}
-            <BarraGasto calc={calc} />
-
-            {/* Desglose completo */}
-            <div style={{ marginTop: 16, background: 'var(--bg3)', borderRadius: 8, padding: '12px 14px' }}>
-              <Row label="Ingresos brutos" val={fmtARS(calc.ingresosBrutos)} color="var(--green)" bold />
-              <Row label={`  Ahorro + libre (${Math.round(calc.pct * 100)}%)`} val={`− ${fmtARS(calc.montoAhorroLibre)}`} color="var(--text3)" indent />
-              <Row label="  Para gastos del mes" val={fmtARS(calc.ingresosParaGastos)} color="var(--text2)" indent />
-              <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
-              <Row label="Gastos fijos propios" val={`− ${fmtARS(calc.sumaGastosFijosNetos)}`} color="var(--text2)" />
-              <Row label="Tarjetas" val={`− ${fmtARS(calc.sumaTarjetas)}`} color="var(--text2)" />
-              {calc.totalReintegros > 0 && <Row label="Reintegros" val={`+ ${fmtARS(calc.totalReintegros)}`} color="var(--green)" />}
-              <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
-              <Row
-                label="Lo que te queda"
-                val={fmtARS(calc.presupuesto)}
-                color={calc.presupuesto >= 0 ? 'var(--green)' : 'var(--red)'}
-                bold
-              />
-            </div>
+          {/* Tres grandes números */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
+            <StatBox label="Ingresos" val={fmtARS(calc.ingresosBrutos)} color="#22c55e" />
+            <StatBox label="Gastos"   val={fmtARS(calc.gastosTotales)}  color="#ef4444" />
+            <StatBox label="Te queda" val={fmtARS(calc.presupuesto)}
+              color={calc.presupuesto >= 0 ? '#22c55e' : '#ef4444'} highlight />
           </div>
 
-          {/* ── Distribución ahorro + libre (editable, secundario) ── */}
-          <div className="card">
-            <div className="card-title"><div className="card-title-left">Configuración</div></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 16px', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-              <label style={{ fontSize: 13, color: 'var(--text2)' }}>% para ahorro + libre</label>
-              <NumInput
-                value={Math.round((safeData.pctAhorroLibre ?? 0.23) * 100)}
-                onChange={v => save({ ...data, pctAhorroLibre: Math.min(1, Math.max(0, v / 100)) })}
-              />
+          {/* Barra */}
+          <BarraGasto calc={calc} />
+
+          {/* Desglose */}
+          <div className="s-card" style={{ marginTop: 10 }}>
+            <SRow label="Ingresos brutos"                          val={fmtARS(calc.ingresosBrutos)}       color="#22c55e" bold />
+            <SRow label={`  Ahorro + libre (${Math.round(calc.pct*100)}%)`} val={`− ${fmtARS(calc.montoAhorroLibre)}`} color="var(--text3)" />
+            <SRow label="  Para gastos"                            val={fmtARS(calc.ingresosParaGastos)}   color="var(--text2)" />
+            <div style={{ borderTop:'1px solid var(--border)', margin:'6px 0' }} />
+            <SRow label="Gastos fijos"    val={`− ${fmtARS(calc.sumaGastosFijosNetos)}`} color="var(--text2)" />
+            <SRow label="Tarjetas"        val={`− ${fmtARS(calc.sumaTarjetas)}`}          color="var(--text2)" />
+            {calc.totalReintegros > 0 && <SRow label="Reintegros" val={`+ ${fmtARS(calc.totalReintegros)}`} color="#22c55e" />}
+            <div style={{ borderTop:'1px solid var(--border)', margin:'6px 0' }} />
+            <SRow label="Te queda" val={fmtARS(calc.presupuesto)}
+              color={calc.presupuesto >= 0 ? '#22c55e' : '#ef4444'} bold />
+          </div>
+
+          {/* Config */}
+          <div className="s-card" style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Configuración</div>
+            <CfgRow label="% ahorro + libre">
+              <NumInput value={Math.round(sd.pctAhorroLibre * 100)}
+                onChange={v => save({ ...data, pctAhorroLibre: Math.min(1, Math.max(0, v/100)) })}
+                style={{ width: 70 }} />
               <span style={{ fontSize: 12, color: 'var(--text3)' }}>%</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 8, alignItems: 'center' }}>
-              <label style={{ fontSize: 13, color: 'var(--text2)' }}>Dinero libre (gustitos)</label>
-              <NumInput value={safeData.libreBase ?? 0} onChange={v => save({ ...data, libreBase: v })} />
-            </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
-              Libre disponible este mes:&nbsp;
-              <strong style={{ color: calc.libreDisponible >= 0 ? 'var(--accent3)' : 'var(--red)' }}>
-                {fmtARS(calc.libreDisponible)}
-              </strong>
-              {calc.sumaPending > 0 && ` (base ${fmtARS(calc.libre)} − ${fmtARS(calc.sumaPending)} en compras pendientes)`}
-              <span style={{ display: 'block', marginTop: 2 }}>
-                Ahorro del mes:&nbsp;
-                <strong style={{ color: 'var(--green)' }}>{fmtARS(calc.montoAhorro)}</strong>
-              </span>
+            </CfgRow>
+            <CfgRow label="Libre (gustitos)">
+              <NumInput value={sd.libreBase} onChange={v => save({ ...data, libreBase: v })} style={{ width: 140 }} />
+            </CfgRow>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
+              Libre disponible: <strong style={{ color: calc.libreDisponible >= 0 ? 'var(--accent3)' : '#ef4444' }}>{fmtARS(calc.libreDisponible)}</strong>
+              {'  '}·{'  '}Ahorro del mes: <strong style={{ color: '#22c55e' }}>{fmtARS(calc.montoAhorro)}</strong>
             </div>
           </div>
 
-          {/* ── Tarjetas ── */}
-          <div className="card">
-            <div className="card-title"><div className="card-title-left"><CreditCard size={14} /> Tarjetas</div></div>
+          {/* Tarjetas resumen */}
+          <div className="s-card" style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Tarjetas</div>
             {calc.tarjetasDetalle.map(t => {
-              const color = getTarjetaColor(t.nombre)
+              const c = getTarjetaColor(t.nombre)
               return (
-                <div key={t.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '7px 10px', borderRadius: 6, marginBottom: 4,
-                  background: `${color.bg}18`, border: `1px solid ${color.bg}55`,
-                }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: color.text }}>{t.nombre}</span>
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', borderRadius: 5, marginBottom: 3, background: `${c.bg}18`, borderLeft: `3px solid ${c.bg}` }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{t.nombre}</span>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: 15, fontWeight: 700 }}>{fmtARS(t.total)}</span>
-                    {t.debitos > 0 && <div style={{ fontSize: 11, color: 'var(--text3)' }}>incl. {fmtARS(t.debitos)} déb. auto</div>}
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>{fmtARS(t.total)}</span>
+                    {t.debitos > 0 && <div style={{ fontSize: 10, color: 'var(--text3)' }}>+ {fmtARS(t.debitos)} auto</div>}
                   </div>
                 </div>
               )
             })}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px 0', fontWeight: 700 }}>
-              <span style={{ fontSize: 13 }}>Total tarjetas</span>
-              <span style={{ fontSize: 15, color: 'var(--accent3)' }}>{fmtARS(calc.sumaTarjetas)}</span>
-            </div>
           </div>
 
-          <ProyeccionTable proyeccion={calc.proyeccion} currentYear={safeData.year} currentMonth={safeData.month} />
+          <ProyeccionTable proyeccion={calc.proyeccion} currentYear={sd.year} currentMonth={sd.month} />
         </>
       )}
 
       {/* ── INGRESOS ─────────────────────────────────────────── */}
       {activeTab === 'ingresos' && (
         <>
-          {/* Fijos */}
-          <div className="card">
-            <div className="card-title">
-              <div className="card-title-left"><TrendingUp size={14} /> Ingresos fijos</div>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
-                {fmtARS(calc.ingresosFijosTotal)}
-              </span>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
-              CONICET y UNLP. Se copian automáticamente al crear un nuevo mes.
-            </div>
-            {(safeData.ingresosFijos || []).map(item => (
+          <SectionBlock
+            title="Fijos"
+            subtitle="Se copian al mes siguiente"
+            total={fmtARS(calc.ingresosFijosTotal)}
+            items={sd.ingresosFijos}
+            onReorder={list => reorderList('ingresosFijos', list)}
+            onAdd={() => addToList('ingresosFijos')}
+            renderItem={item => (
               <ItemRow key={item.id} item={item} venta={venta}
-                onChange={(f, v) => updateInItem('ingresosFijos', item.id, f, v)}
-                onRemove={() => removeFrom('ingresosFijos', item.id)} />
-            ))}
-            <button className="btn-add" style={{ marginTop: 8 }}
-              onClick={() => addIn('ingresosFijos')}>
-              <Plus size={13} /> Agregar ingreso fijo
-            </button>
-          </div>
-
-          {/* Extras */}
-          <div className="card">
-            <div className="card-title">
-              <div className="card-title-left">Ingresos extras</div>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
-                {fmtARS(calc.ingresosExtrasTotal)}
-              </span>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
-              Aguinaldo, bonos, freelance, etc. No se copian al mes siguiente.
-            </div>
-            {(safeData.ingresosExtras || []).map(item => (
-              <ItemRow key={item.id} item={item} venta={venta}
-                onChange={(f, v) => updateInItem('ingresosExtras', item.id, f, v)}
-                onRemove={() => removeFrom('ingresosExtras', item.id)} />
-            ))}
-            {(!safeData.ingresosExtras || safeData.ingresosExtras.length === 0) && (
-              <div style={{ color: 'var(--text3)', fontSize: 13, padding: '6px 0' }}>Sin extras este mes</div>
+                onChange={(f,v) => updateListItem('ingresosFijos', item.id, f, v)}
+                onRemove={() => removeFromList('ingresosFijos', item.id)} />
             )}
-            <button className="btn-add" style={{ marginTop: 8 }}
-              onClick={() => addIn('ingresosExtras')}>
-              <Plus size={13} /> Agregar extra
-            </button>
-          </div>
-
-          {/* Reintegros */}
-          <div className="card">
-            <div className="card-title">
-              <div className="card-title-left"><RefreshCcw size={14} /> Reintegros / me deben</div>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--green)' }}>
-                {fmtARS(calc.totalReintegros)}
-              </span>
-            </div>
-            {(safeData.reintegros || []).map(item => (
+          />
+          <SectionBlock
+            title="Extras"
+            subtitle="No se copian al mes siguiente"
+            total={fmtARS(calc.ingresosExtrasTotal)}
+            items={sd.ingresosExtras}
+            onReorder={list => reorderList('ingresosExtras', list)}
+            onAdd={() => addToList('ingresosExtras')}
+            renderItem={item => (
               <ItemRow key={item.id} item={item} venta={venta}
-                onChange={(f, v) => updateInItem('reintegros', item.id, f, v)}
-                onRemove={() => removeFrom('reintegros', item.id)} />
-            ))}
-            {(!safeData.reintegros || safeData.reintegros.length === 0) && (
-              <div style={{ color: 'var(--text3)', fontSize: 13, padding: '6px 0' }}>Sin reintegros</div>
+                onChange={(f,v) => updateListItem('ingresosExtras', item.id, f, v)}
+                onRemove={() => removeFromList('ingresosExtras', item.id)} />
             )}
-            <button className="btn-add" style={{ marginTop: 8 }}
-              onClick={() => addIn('reintegros')}>
-              <Plus size={13} /> Agregar reintegro
-            </button>
-          </div>
-
-          {/* Resumen */}
-          <div className="card">
-            <div className="card-title"><div className="card-title-left">Resumen ingresos</div></div>
-            <Row label="Fijos" val={fmtARS(calc.ingresosFijosTotal)} color="var(--text2)" />
-            <Row label="Extras" val={fmtARS(calc.ingresosExtrasTotal)} color="var(--text2)" />
-            <Row label="Reintegros" val={fmtARS(calc.totalReintegros)} color="var(--green)" />
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, marginTop: 4 }}>
-              <Row label="Total bruto" val={fmtARS(calc.ingresosBrutos)} color="var(--green)" bold />
-            </div>
-          </div>
+          />
+          <SectionBlock
+            title="Reintegros"
+            subtitle="Me deben"
+            total={fmtARS(calc.totalReintegros)}
+            items={sd.reintegros}
+            onReorder={list => reorderList('reintegros', list)}
+            onAdd={() => addToList('reintegros')}
+            renderItem={item => (
+              <ItemRow key={item.id} item={item} venta={venta}
+                onChange={(f,v) => updateListItem('reintegros', item.id, f, v)}
+                onRemove={() => removeFromList('reintegros', item.id)} />
+            )}
+          />
         </>
       )}
 
-      {/* ── GASTOS FIJOS ─────────────────────────────────────── */}
-      {activeTab === 'fijos' && (
+      {/* ── GASTOS ───────────────────────────────────────────── */}
+      {activeTab === 'gastos' && (
         <GastosFijosSection
-          gastosFijos={safeData.gastosFijos || []}
-          tarjetas={safeData.tarjetas || []}
-          onChange={gf => save({ ...data, gastosFijos: gf })}
+          gastosFijos={sd.gastosFijos}
+          otrosGastos={sd.otrosGastos}
+          tarjetas={sd.tarjetas}
+          onChangeFijos={gf => save({ ...data, gastosFijos: gf })}
+          onChangeOtros={og => save({ ...data, otrosGastos: og })}
           dolar={venta}
         />
       )}
@@ -300,18 +230,15 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
       {/* ── TARJETAS ─────────────────────────────────────────── */}
       {activeTab === 'tarjetas' && (
         <>
-          {(safeData.tarjetas || []).map(tarjeta => (
-            <TarjetaSection
-              key={tarjeta.id}
-              tarjeta={tarjeta}
-              onUpdate={ch => updateTarjeta(tarjeta.id, ch)}
-              onRemove={() => save({ ...data, tarjetas: data.tarjetas.filter(t => t.id !== tarjeta.id) })}
-              debitosAuto={calc.debitosAutoXTarjeta[tarjeta.nombre] || 0}
-            />
+          {sd.tarjetas.map(t => (
+            <TarjetaSection key={t.id} tarjeta={t}
+              onUpdate={ch => updateTarjeta(t.id, ch)}
+              onRemove={() => save({ ...data, tarjetas: data.tarjetas.filter(x => x.id !== t.id) })}
+              debitosAuto={calc.debitosAutoXTarjeta[t.nombre] || 0} />
           ))}
-          <button className="btn btn-ghost" style={{ marginBottom: 12 }}
+          <button className="s-add-btn"
             onClick={() => save({ ...data, tarjetas: [...data.tarjetas, { id: uid(), nombre: 'Nueva tarjeta', mantenimiento: 0, items: [] }] })}>
-            <Plus size={14} /> Agregar tarjeta
+            +
           </button>
         </>
       )}
@@ -319,52 +246,28 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
       {/* ── AHORROS ──────────────────────────────────────────── */}
       {activeTab === 'ahorros' && (
         <>
-          <DolarWidget compra={compra} venta={venta}
-            loading={dolarLoading} lastUpdate={lastUpdate}
-            error={dolarError} onRefresh={refreshDolar} />
+          <DolarWidget compra={compra} venta={venta} loading={dolarLoading}
+            lastUpdate={lastUpdate} error={dolarError} onRefresh={refreshDolar} />
 
-          {/* Distribución del ahorro */}
-          <div className="card" style={{ marginTop: 14 }}>
-            <div className="card-title"><div className="card-title-left">Distribución del ahorro del mes</div></div>
-            <div style={{ background: 'rgba(34,197,94,.07)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
-              <div style={{ color: 'var(--text3)', marginBottom: 4 }}>Ahorro del mes disponible para invertir</div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--green)' }}>{fmtARS(calc.montoAhorro)}</div>
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                {fmtARS(calc.ingresosBrutos)} × {Math.round(calc.pct * 100)}% − {fmtARS(calc.libre)} libre
-              </div>
+          <div className="s-card" style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
+              Distribución del ahorro del mes
             </div>
-
-            <FactorRow
-              label="→ USD"
-              factor={safeData.factorUSD ?? 0.5}
-              monto={calc.montoAhorro * (safeData.factorUSD ?? 0.5)}
-              color="var(--yellow)"
-              onChange={v => {
-                const f = Math.min(1, Math.max(0, v / 100))
-                save({ ...data, factorUSD: f, factorYPF: parseFloat((1 - f).toFixed(4)) })
-              }}
-            />
-            <FactorRow
-              label="→ YPF"
-              factor={safeData.factorYPF ?? 0.5}
-              monto={calc.montoAhorro * (safeData.factorYPF ?? 0.5)}
-              color="var(--accent3)"
-              onChange={v => {
-                const f = Math.min(1, Math.max(0, v / 100))
-                save({ ...data, factorYPF: f, factorUSD: parseFloat((1 - f).toFixed(4)) })
-              }}
-            />
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-              Los porcentajes deben sumar 100%. Al cambiar uno, el otro se ajusta automáticamente.
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#22c55e', marginBottom: 4 }}>{fmtARS(calc.montoAhorro)}</div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 12 }}>
+              {fmtARS(calc.ingresosBrutos)} × {Math.round(calc.pct*100)}% − {fmtARS(calc.libre)} libre
             </div>
+            <FactorRow label="USD" factor={sd.factorUSD} monto={calc.montoAhorro*(sd.factorUSD??0.5)} color="var(--yellow)"
+              onChange={v => { const f=Math.min(1,Math.max(0,v/100)); save({...data,factorUSD:f,factorYPF:+(1-f).toFixed(4)}) }} />
+            <FactorRow label="YPF" factor={sd.factorYPF} monto={calc.montoAhorro*(sd.factorYPF??0.5)} color="var(--accent3)"
+              onChange={v => { const f=Math.min(1,Math.max(0,v/100)); save({...data,factorYPF:f,factorUSD:+(1-f).toFixed(4)}) }} />
           </div>
 
           <AhorrosPanel
-            dolarCompra={compra}
-            dolarVenta={venta}
+            dolarCompra={compra} dolarVenta={venta}
             ahorroMes={calc.montoAhorro}
-            factorUSD={safeData.factorUSD ?? 0.5}
-            factorYPF={safeData.factorYPF ?? 0.5}
+            factorUSD={sd.factorUSD??0.5}
+            factorYPF={sd.factorYPF??0.5}
           />
         </>
       )}
@@ -372,108 +275,152 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
   )
 }
 
-// ── Row de distribución ──────────────────────────────────────────────────────
-function Row({ label, val, color, bold, indent }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0',
-      paddingLeft: indent ? 16 : 0 }}>
-      <span style={{ fontSize: 13, color: 'var(--text2)' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: bold ? 700 : 500, color }}>{val}</span>
-    </div>
-  )
-}
-
-// ── Row de factor ahorro ─────────────────────────────────────────────────────
-function FactorRow({ label, factor, monto, color, onChange }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-      <span style={{ fontSize: 14, color, fontWeight: 700, width: 60 }}>{label}</span>
-      <NumInput
-        value={Math.round(factor * 100)}
-        onChange={onChange}
-        style={{ width: 70 }}
-      />
-      <span style={{ fontSize: 13, color: 'var(--text3)' }}>%</span>
-      <span style={{ fontSize: 14, fontWeight: 600, color, marginLeft: 'auto' }}>{fmtARS(monto)}</span>
-    </div>
-  )
-}
-
-// ── Stat grande en el resumen ────────────────────────────────────────────────
-function BigStat({ label, val, color, highlight }) {
+// ── Helpers visuales ─────────────────────────────────────────────────────────
+function StatBox({ label, val, color, highlight }) {
   return (
     <div style={{
-      background: highlight ? `${color}18` : 'var(--bg3)',
-      border: highlight ? `1px solid ${color}55` : '1px solid var(--border)',
-      borderRadius: 8, padding: '12px 14px',
+      background: highlight ? `${color}14` : 'var(--bg2)',
+      border: `1px solid ${highlight ? color+'44' : 'var(--border)'}`,
+      borderRadius: 8, padding: '10px 12px',
     }}>
-      <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 17, fontWeight: 800, color, lineHeight: 1.2, wordBreak: 'break-all' }}>
-        {val}
-      </div>
+      <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color, lineHeight: 1.2 }}>{val}</div>
     </div>
   )
 }
-
-// ── Barra de distribución ────────────────────────────────────────────────────
+function SRow({ label, val, color, bold }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+      <span style={{ fontSize: 13, color: 'var(--text2)' }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: bold ? 700 : 400, color }}>{val}</span>
+    </div>
+  )
+}
+function CfgRow({ label, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>{label}</span>
+      {children}
+    </div>
+  )
+}
 function BarraGasto({ calc }) {
   const total = calc.ingresosBrutos || 1
   const segs = [
-    { label: 'Libre', val: calc.libre, color: '#6c63ff' },
-    { label: 'Ahorro', val: calc.montoAhorro, color: '#22c55e' },
-    { label: 'Fijos', val: calc.sumaGastosFijosNetos, color: '#ef4444' },
-    { label: 'Tarjetas', val: calc.sumaTarjetas, color: '#f59e0b' },
-  ].filter(s => s.val > 0)
-  const rest = total - segs.reduce((a, s) => a + s.val, 0)
-  if (rest > 0) segs.push({ label: 'Disponible', val: rest, color: '#22d3ee' })
+    { l:'Libre',    v:calc.libre,                c:'#6c63ff' },
+    { l:'Ahorro',   v:calc.montoAhorro,          c:'#22c55e' },
+    { l:'Fijos',    v:calc.sumaGastosFijosNetos, c:'#ef4444' },
+    { l:'Tarjetas', v:calc.sumaTarjetas,          c:'#f59e0b' },
+  ].filter(s => s.v > 0)
+  const rest = total - segs.reduce((a,s) => a+s.v, 0)
+  if (rest > 0) segs.push({ l:'Disponible', v:rest, c:'#22d3ee' })
   return (
-    <>
-      <div style={{ display: 'flex', height: 20, borderRadius: 6, overflow: 'hidden', marginBottom: 10 }}>
+    <div style={{ marginBottom: 4 }}>
+      <div style={{ display:'flex', height:12, borderRadius:4, overflow:'hidden', marginBottom:6 }}>
+        {segs.map(s => <div key={s.l} style={{ width:`${(s.v/total)*100}%`, background:s.c }} title={`${s.l}: ${fmtARS(s.v)}`} />)}
+      </div>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'3px 12px' }}>
         {segs.map(s => (
-          <div key={s.label} style={{ width: `${(s.val / total) * 100}%`, background: s.color }}
-            title={`${s.label}: ${fmtARS(s.val)}`} />
+          <span key={s.l} style={{ fontSize:11, color:'var(--text3)', display:'flex', alignItems:'center', gap:4 }}>
+            <span style={{ width:7, height:7, borderRadius:2, background:s.c, display:'inline-block' }} />
+            {s.l}: <strong style={{ color:'var(--text2)' }}>{fmtARS(s.v)}</strong>
+          </span>
         ))}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
-        {segs.map(s => (
-          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-            <div style={{ width: 9, height: 9, borderRadius: 2, background: s.color }} />
-            <span style={{ color: 'var(--text2)' }}>{s.label}</span>
-            <span style={{ fontWeight: 600 }}>{fmtARS(s.val)}</span>
-          </div>
-        ))}
-      </div>
-    </>
+    </div>
+  )
+}
+function FactorRow({ label, factor, monto, color, onChange }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+      <span style={{ fontSize:13, fontWeight:700, color, width:36 }}>{label}</span>
+      <NumInput value={Math.round((factor??0.5)*100)} onChange={onChange} style={{ width:64 }} />
+      <span style={{ fontSize:12, color:'var(--text3)' }}>%</span>
+      <span style={{ fontSize:13, fontWeight:600, color, marginLeft:'auto' }}>{fmtARS(monto)}</span>
+    </div>
   )
 }
 
-// ── Fila de item (ingreso / reintegro) ───────────────────────────────────────
-function ItemRow({ item, venta, onChange, onRemove }) {
-  const montoARS = item.usd && venta > 0 ? (item.monto || 0) * venta : null
+// ── SectionBlock: bloque con título, drag & drop y botón + ──────────────────
+function SectionBlock({ title, subtitle, total, items, onReorder, onAdd, renderItem }) {
+  const dragIdx = useRef(null)
+  const [overIdx, setOverIdx] = useState(null)
+
+  function onDragStart(e, i) {
+    dragIdx.current = i
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  function onDragOver(e, i) {
+    e.preventDefault()
+    setOverIdx(i)
+  }
+  function onDrop(e, i) {
+    e.preventDefault()
+    if (dragIdx.current === null || dragIdx.current === i) { reset(); return }
+    const list = [...items]
+    const [moved] = list.splice(dragIdx.current, 1)
+    list.splice(i, 0, moved)
+    onReorder(list)
+    reset()
+  }
+  function reset() { dragIdx.current = null; setOverIdx(null) }
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 52px 24px',
-      gap: 8, alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
+    <div className="s-card" style={{ marginBottom: 10 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+        <div>
+          <span style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{title}</span>
+          {subtitle && <span style={{ fontSize:11, color:'var(--text3)', marginLeft:8 }}>{subtitle}</span>}
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:13, fontWeight:700, color:'#22c55e' }}>{total}</span>
+          <button className="s-add-btn" onClick={onAdd}>+</button>
+        </div>
+      </div>
+      {items.map((item, i) => (
+        <div key={item.id}
+          draggable
+          onDragStart={e => onDragStart(e, i)}
+          onDragOver={e => onDragOver(e, i)}
+          onDrop={e => onDrop(e, i)}
+          onDragEnd={reset}
+          style={{
+            display:'flex', alignItems:'center', gap:6,
+            borderTop: i === 0 ? '1px solid var(--border)' : 'none',
+            borderBottom: overIdx === i ? '2px solid var(--accent)' : '1px solid var(--border)',
+            opacity: dragIdx.current === i ? 0.4 : 1,
+          }}
+        >
+          <GripVertical size={13} style={{ color:'var(--text3)', flexShrink:0, cursor:'grab' }} />
+          <div style={{ flex:1 }}>{renderItem(item)}</div>
+        </div>
+      ))}
+      {items.length === 0 && <div style={{ fontSize:12, color:'var(--text3)', padding:'4px 0' }}>—</div>}
+    </div>
+  )
+}
+
+// ── ItemRow (ingreso / reintegro) ────────────────────────────────────────────
+function ItemRow({ item, venta, onChange, onRemove }) {
+  const montoARS = item.usd && venta > 0 ? (item.monto||0)*venta : null
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 44px 22px', gap:6, alignItems:'center', padding:'4px 0' }}>
       <input className="inline" value={item.concepto} placeholder="Concepto"
+        onMouseDown={e=>e.stopPropagation()}
         onChange={e => onChange('concepto', e.target.value)} />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-        <NumInput value={item.monto} onChange={v => onChange('monto', v)}
-          usd={item.usd} style={{ width: '100%' }} />
-        {item.usd && venta > 0 && item.monto > 0 && (
-          <span style={{ fontSize: 10, color: 'var(--text3)' }}>= {fmtARS(montoARS)}</span>
+      <div>
+        <NumInput value={item.monto} onChange={v => onChange('monto',v)} usd={item.usd} style={{ width:'100%' }} />
+        {item.usd && venta>0 && item.monto>0 && (
+          <div style={{ fontSize:10, color:'var(--text3)', textAlign:'right' }}>= {fmtARS(montoARS)}</div>
         )}
       </div>
-      <button
-        onClick={() => onChange('usd', !item.usd)}
-        style={{
-          padding: '4px 8px', borderRadius: 4, border: 'none', cursor: 'pointer',
-          fontSize: 11, fontWeight: 700,
+      <button onMouseDown={e=>e.stopPropagation()} onClick={() => onChange('usd',!item.usd)}
+        style={{ padding:'3px 6px', borderRadius:3, border:'none', cursor:'pointer', fontSize:10, fontWeight:700,
           background: item.usd ? 'rgba(245,158,11,.2)' : 'var(--bg4)',
-          color: item.usd ? 'var(--yellow)' : 'var(--text3)',
-        }}
-      >{item.usd ? 'USD' : 'ARS'}</button>
-      <button className="btn-icon" onClick={onRemove}><Trash2 size={14} /></button>
+          color: item.usd ? 'var(--yellow)' : 'var(--text3)' }}>
+        {item.usd?'USD':'ARS'}
+      </button>
+      <button className="btn-icon" onMouseDown={e=>e.stopPropagation()} onClick={onRemove}><Trash2 size={12}/></button>
     </div>
   )
 }
