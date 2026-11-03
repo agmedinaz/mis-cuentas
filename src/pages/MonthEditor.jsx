@@ -4,7 +4,6 @@ import {
   loadMonth, saveMonth, calcMonth, fmtARS, fmtUSD, uid,
   loadPendingPurchases, monthName, getTarjetaColor,
 } from '../store'
-import LibreCard from '../components/LibreCard'
 import TarjetaSection from '../components/TarjetaSection'
 import GastosFijosSection from '../components/GastosFijosSection'
 import ProyeccionTable from '../components/ProyeccionTable'
@@ -108,54 +107,73 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
       {/* ── RESUMEN ─────────────────────────────────────────── */}
       {activeTab === 'resumen' && (
         <>
-          <LibreCard calc={calc} data={safeData} pending={pending}
-            onSetLibre={v => save({ ...data, libreBase: v })} />
-
-          {/* Config de distribución */}
+          {/* ── Balance principal ── */}
           <div className="card">
-            <div className="card-title"><div className="card-title-left">Distribución del ingreso</div></div>
+            <div className="card-title"><div className="card-title-left">Balance del mes</div></div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-              <label style={{ fontSize: 13, color: 'var(--text2)' }}>
-                % destinado a ahorro + libre
-              </label>
-              <NumInput
-                value={Math.round((safeData.pctAhorroLibre ?? 0.23) * 100)}
-                onChange={v => save({ ...data, pctAhorroLibre: Math.min(1, Math.max(0, v / 100)) })}
-                style={{ width: 70 }}
+            {/* Grandes números arriba */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+              <BigStat label="Ingresos" val={fmtARS(calc.ingresosBrutos)} color="var(--green)" />
+              <BigStat label="Gastos totales" val={fmtARS(calc.gastosTotales)} color="var(--red)" />
+              <BigStat
+                label="Lo que te queda"
+                val={fmtARS(calc.presupuesto)}
+                color={calc.presupuesto >= 0 ? 'var(--green)' : 'var(--red)'}
+                highlight
               />
-              <span style={{ fontSize: 13, color: 'var(--text3)' }}>%</span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', marginBottom: 14 }}>
-              <label style={{ fontSize: 13, color: 'var(--text2)' }}>Dinero libre (gustitos)</label>
-              <NumInput value={safeData.libreBase ?? 0}
-                onChange={v => save({ ...data, libreBase: v })}
-                style={{ width: 160 }} />
-            </div>
-
-            {/* Visualización */}
-            <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '12px 14px', fontSize: 13 }}>
-              <Row label="Ingresos brutos" val={fmtARS(calc.ingresosBrutos)} color="var(--green)" bold />
-              <Row label={`→ Ahorro + libre (${Math.round(calc.pct * 100)}%)`} val={fmtARS(calc.montoAhorroLibre)} color="var(--accent3)" />
-              <Row label="   · Libre (gustitos)" val={fmtARS(calc.libre)} color="var(--accent3)" indent />
-              <Row label="   · Ahorro del mes" val={fmtARS(calc.montoAhorro)} color="var(--green)" indent />
-              <Row label={`→ Para gastos del mes (${Math.round((1 - calc.pct) * 100)}%)`} val={fmtARS(calc.ingresosParaGastos)} color="var(--text)" />
-              <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
-                <Row label="Gastos totales" val={fmtARS(calc.gastosTotales)} color="var(--red)" />
-                <Row label="Reintegros" val={fmtARS(calc.totalReintegros)} color="var(--green)" />
-                <Row label="Lo que te queda" val={fmtARS(calc.presupuesto)}
-                  color={calc.presupuesto >= 0 ? 'var(--green)' : 'var(--red)'} bold />
-              </div>
             </div>
 
             {/* Barra de distribución */}
-            <div style={{ marginTop: 14 }}>
-              <BarraGasto calc={calc} />
+            <BarraGasto calc={calc} />
+
+            {/* Desglose completo */}
+            <div style={{ marginTop: 16, background: 'var(--bg3)', borderRadius: 8, padding: '12px 14px' }}>
+              <Row label="Ingresos brutos" val={fmtARS(calc.ingresosBrutos)} color="var(--green)" bold />
+              <Row label={`  Ahorro + libre (${Math.round(calc.pct * 100)}%)`} val={`− ${fmtARS(calc.montoAhorroLibre)}`} color="var(--text3)" indent />
+              <Row label="  Para gastos del mes" val={fmtARS(calc.ingresosParaGastos)} color="var(--text2)" indent />
+              <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+              <Row label="Gastos fijos propios" val={`− ${fmtARS(calc.sumaGastosFijosNetos)}`} color="var(--text2)" />
+              <Row label="Tarjetas" val={`− ${fmtARS(calc.sumaTarjetas)}`} color="var(--text2)" />
+              {calc.totalReintegros > 0 && <Row label="Reintegros" val={`+ ${fmtARS(calc.totalReintegros)}`} color="var(--green)" />}
+              <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+              <Row
+                label="Lo que te queda"
+                val={fmtARS(calc.presupuesto)}
+                color={calc.presupuesto >= 0 ? 'var(--green)' : 'var(--red)'}
+                bold
+              />
             </div>
           </div>
 
-          {/* Resumen tarjetas */}
+          {/* ── Distribución ahorro + libre (editable, secundario) ── */}
+          <div className="card">
+            <div className="card-title"><div className="card-title-left">Configuración</div></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 16px', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+              <label style={{ fontSize: 13, color: 'var(--text2)' }}>% para ahorro + libre</label>
+              <NumInput
+                value={Math.round((safeData.pctAhorroLibre ?? 0.23) * 100)}
+                onChange={v => save({ ...data, pctAhorroLibre: Math.min(1, Math.max(0, v / 100)) })}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text3)' }}>%</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 8, alignItems: 'center' }}>
+              <label style={{ fontSize: 13, color: 'var(--text2)' }}>Dinero libre (gustitos)</label>
+              <NumInput value={safeData.libreBase ?? 0} onChange={v => save({ ...data, libreBase: v })} />
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
+              Libre disponible este mes:&nbsp;
+              <strong style={{ color: calc.libreDisponible >= 0 ? 'var(--accent3)' : 'var(--red)' }}>
+                {fmtARS(calc.libreDisponible)}
+              </strong>
+              {calc.sumaPending > 0 && ` (base ${fmtARS(calc.libre)} − ${fmtARS(calc.sumaPending)} en compras pendientes)`}
+              <span style={{ display: 'block', marginTop: 2 }}>
+                Ahorro del mes:&nbsp;
+                <strong style={{ color: 'var(--green)' }}>{fmtARS(calc.montoAhorro)}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* ── Tarjetas ── */}
           <div className="card">
             <div className="card-title"><div className="card-title-left"><CreditCard size={14} /> Tarjetas</div></div>
             {calc.tarjetasDetalle.map(t => {
@@ -163,17 +181,21 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
               return (
                 <div key={t.id} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '6px 10px', borderRadius: 6, marginBottom: 4,
+                  padding: '7px 10px', borderRadius: 6, marginBottom: 4,
                   background: `${color.bg}18`, border: `1px solid ${color.bg}55`,
                 }}>
-                  <span style={{ fontSize: 14, color: color.text, fontWeight: 600 }}>{t.nombre}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: color.text }}>{t.nombre}</span>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>{fmtARS(t.total)}</span>
-                    {t.debitos > 0 && <div style={{ fontSize: 11, color: 'var(--text3)' }}>incl. {fmtARS(t.debitos)} débito auto</div>}
+                    <span style={{ fontSize: 15, fontWeight: 700 }}>{fmtARS(t.total)}</span>
+                    {t.debitos > 0 && <div style={{ fontSize: 11, color: 'var(--text3)' }}>incl. {fmtARS(t.debitos)} déb. auto</div>}
                   </div>
                 </div>
               )
             })}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px 0', fontWeight: 700 }}>
+              <span style={{ fontSize: 13 }}>Total tarjetas</span>
+              <span style={{ fontSize: 15, color: 'var(--accent3)' }}>{fmtARS(calc.sumaTarjetas)}</span>
+            </div>
           </div>
 
           <ProyeccionTable proyeccion={calc.proyeccion} currentYear={safeData.year} currentMonth={safeData.month} />
@@ -373,6 +395,24 @@ function FactorRow({ label, factor, monto, color, onChange }) {
       />
       <span style={{ fontSize: 13, color: 'var(--text3)' }}>%</span>
       <span style={{ fontSize: 14, fontWeight: 600, color, marginLeft: 'auto' }}>{fmtARS(monto)}</span>
+    </div>
+  )
+}
+
+// ── Stat grande en el resumen ────────────────────────────────────────────────
+function BigStat({ label, val, color, highlight }) {
+  return (
+    <div style={{
+      background: highlight ? `${color}18` : 'var(--bg3)',
+      border: highlight ? `1px solid ${color}55` : '1px solid var(--border)',
+      borderRadius: 8, padding: '12px 14px',
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 800, color, lineHeight: 1.2, wordBreak: 'break-all' }}>
+        {val}
+      </div>
     </div>
   )
 }
