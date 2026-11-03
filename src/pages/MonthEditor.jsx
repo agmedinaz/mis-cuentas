@@ -412,6 +412,7 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
             ahorroMes={calc.montoAhorro}
             factorUSD={sd.factorUSD??0.5}
             factorYPF={sd.factorYPF??0.5}
+            monthId={monthId}
           />
         </>
       )}

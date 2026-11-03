@@ -5,191 +5,195 @@ import NumInput from './NumInput'
 
 const ALL_GRUPOS = [...GRUPOS_GASTOS_FIJOS, 'Otros gastos']
 
-// Una gran tabla con separadores por grupo — como la planilla
 export default function GastosFijosSection({ gastosFijos, otrosGastos, tarjetas, onChangeFijos, onChangeOtros, dolar }) {
-  const dragItem = useRef(null)
-  const [overInfo, setOverInfo] = useState(null)
+  const dragItem = useRef(null)   // { id, grupo, index }
+  const [overKey, setOverKey] = useState(null)  // "grupo:id" or "grupo:"
 
-  // Unificar todos los items
   const allItems = [
     ...gastosFijos.map(g => ({ ...g, _src: 'fijos' })),
     ...(otrosGastos || []).map(g => ({ ...g, grupo: 'Otros gastos', _src: 'otros' })),
   ]
 
   function updateField(id, grupo, field, value) {
-    const isOtros = grupo === 'Otros gastos'
-    if (isOtros) onChangeOtros((otrosGastos || []).map(x => x.id === id ? { ...x, [field]: value } : x))
-    else onChangeFijos(gastosFijos.map(x => x.id === id ? { ...x, [field]: value } : x))
+    if (grupo === 'Otros gastos') onChangeOtros((otrosGastos||[]).map(x => x.id===id ? {...x,[field]:value} : x))
+    else onChangeFijos(gastosFijos.map(x => x.id===id ? {...x,[field]:value} : x))
   }
-
   function addItem(grupo) {
-    const item = { id: uid(), concepto: '', monto: 0, usd: grupo === 'Streaming', debitoAuto: null }
-    if (grupo === 'Otros gastos') onChangeOtros([...(otrosGastos || []), { ...item, grupo }])
-    else onChangeFijos([...gastosFijos, { ...item, grupo }])
+    const item = { id: uid(), concepto: '', monto: 0, usd: grupo==='Streaming', debitoAuto: null, grupo }
+    if (grupo==='Otros gastos') onChangeOtros([...(otrosGastos||[]), item])
+    else onChangeFijos([...gastosFijos, item])
   }
-
   function removeItem(id, grupo) {
-    if (grupo === 'Otros gastos') onChangeOtros((otrosGastos || []).filter(x => x.id !== id))
-    else onChangeFijos(gastosFijos.filter(x => x.id !== id))
+    if (grupo==='Otros gastos') onChangeOtros((otrosGastos||[]).filter(x=>x.id!==id))
+    else onChangeFijos(gastosFijos.filter(x=>x.id!==id))
   }
 
-  function onDragStart(e, item) { dragItem.current = item; e.dataTransfer.effectAllowed = 'move' }
-  function onDragOver(e, id, grupo) { e.preventDefault(); setOverInfo({ id, grupo }) }
-  function onDrop(e, targetId, targetGrupo) {
+  // ── Drag ────────────────────────────────────────────────────────
+  function handleDragStart(e, item, grupo) {
+    dragItem.current = { ...item, grupo }
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', item.id) // required for Firefox
+  }
+  function handleDragOver(e, key) {
     e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setOverKey(key)
+  }
+  function handleDrop(e, targetId, targetGrupo) {
+    e.preventDefault()
+    e.stopPropagation()
     const src = dragItem.current
-    if (!src) { reset(); return }
-    let list = [...allItems]
-    list = list.map(x => x.id === src.id ? { ...x, grupo: targetGrupo } : x)
-    const si = list.findIndex(x => x.id === src.id)
-    const [moved] = list.splice(si, 1)
-    if (targetId) { const di = list.findIndex(x => x.id === targetId); list.splice(di, 0, moved) }
-    else { const last = list.reduce((l, x, i) => x.grupo === targetGrupo ? i : l, -1); list.splice(last + 1, 0, moved) }
-    onChangeFijos(list.filter(x => x.grupo !== 'Otros gastos').map(({ _src, ...x }) => x))
-    onChangeOtros(list.filter(x => x.grupo === 'Otros gastos').map(({ _src, ...x }) => x))
+    if (!src || src.id === targetId) { reset(); return }
+
+    // Build unified list, change grupo of src
+    let list = allItems.map(x => x.id===src.id ? {...x, grupo: targetGrupo} : x)
+
+    // Reorder: remove src, insert before target (or at end of group)
+    const srcIdx = list.findIndex(x => x.id===src.id)
+    const [moved] = list.splice(srcIdx, 1)
+
+    if (targetId) {
+      const dstIdx = list.findIndex(x => x.id===targetId)
+      list.splice(dstIdx, 0, moved)
+    } else {
+      // Drop on group header or empty zone → append to end of that group
+      const lastInGroup = list.reduce((l,x,i) => x.grupo===targetGrupo ? i : l, -1)
+      list.splice(lastInGroup+1, 0, moved)
+    }
+
+    onChangeFijos(list.filter(x=>x.grupo!=='Otros gastos').map(({_src,...x})=>x))
+    onChangeOtros(list.filter(x=>x.grupo==='Otros gastos').map(({_src,...x})=>x))
     reset()
   }
-  function reset() { dragItem.current = null; setOverInfo(null) }
+  function reset() { dragItem.current=null; setOverKey(null) }
 
-  // Agrupar
+  // Group items
   const grupos = {}
   ALL_GRUPOS.forEach(g => { grupos[g] = [] })
-  gastosFijos.forEach(g => { const gr = g.grupo || 'Personales'; if (grupos[gr]) grupos[gr].push(g) })
-  ;(otrosGastos || []).forEach(g => grupos['Otros gastos'].push({ ...g, grupo: 'Otros gastos' }))
+  gastosFijos.forEach(g => { const gr=g.grupo||'Personales'; if(grupos[gr]) grupos[gr].push(g) })
+  ;(otrosGastos||[]).forEach(g => grupos['Otros gastos'].push({...g,grupo:'Otros gastos'}))
 
-  const totalGlobal = allItems.reduce((a, g) => a + (g.usd && dolar > 0 ? (g.monto || 0) * dolar : (g.monto || 0)), 0)
+  const totalGlobal = allItems.reduce((a,g) => a + (g.usd&&dolar>0 ? (g.monto||0)*dolar : (g.monto||0)), 0)
 
   return (
-    <div>
-      {/* Una sola tabla con separadores de grupo */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead>
-          <tr style={{ background: 'var(--bg3)' }}>
-            <th style={{ ...th, width: 14 }}></th>
-            <th style={th}>Concepto</th>
-            <th style={{ ...th, textAlign: 'right' }}>Monto</th>
-            <th style={{ ...th, textAlign: 'center', width: 44 }}>Mon.</th>
-            <th style={{ ...th, width: 130 }}>Débito auto</th>
-            <th style={{ ...th, width: 20 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {ALL_GRUPOS.map(grupo => {
-            const items = grupos[grupo] || []
-            const grupoTotal = items.reduce((a, g) => a + (g.usd && dolar > 0 ? (g.monto || 0) * dolar : (g.monto || 0)), 0)
-            return (
-              <React.Fragment key={grupo}>
-                {/* Separador de grupo */}
-                <tr>
-                  <td colSpan={6} style={{
-                    padding: '6px 8px 3px',
-                    borderTop: '1px solid var(--border)',
-                    background: 'var(--bg3)',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
-                        {grupo}
-                      </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)' }}>{fmtARS(grupoTotal)}</span>
-                        <button className="s-add-btn" onClick={() => addItem(grupo)} style={{ width: 18, height: 18, fontSize: 13 }}>+</button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
+    <div onDragEnd={reset}>
+      {/* Col headers — once, sticky */}
+      <div style={{ display:'grid', gridTemplateColumns:'14px 1fr 116px 46px 130px 22px', gap:4, padding:'4px 6px', background:'var(--bg3)', borderBottom:'1px solid var(--border)', fontSize:11, fontWeight:700, color:'var(--text3)', textTransform:'uppercase', letterSpacing:'.05em' }}>
+        <span/>
+        <span>Concepto</span>
+        <span style={{textAlign:'right'}}>Monto</span>
+        <span style={{textAlign:'center'}}>Mon.</span>
+        <span style={{textAlign:'center'}}>Débito auto</span>
+        <span/>
+      </div>
 
-                {items.length === 0 && (
-                  <tr onDragOver={e => onDragOver(e, null, grupo)} onDrop={e => onDrop(e, null, grupo)}>
-                    <td colSpan={6} style={{ padding: '4px 8px', fontSize: 11, color: 'var(--text3)',
-                      borderBottom: overInfo?.grupo === grupo ? '2px solid var(--accent)' : '1px solid var(--border)' }}>
-                      —
-                    </td>
-                  </tr>
-                )}
+      {ALL_GRUPOS.map(grupo => {
+        const items = grupos[grupo]||[]
+        const grupoTotal = items.reduce((a,g)=>a+(g.usd&&dolar>0?(g.monto||0)*dolar:(g.monto||0)),0)
+        const dropKey = `${grupo}:`
 
-                {items.map(item => {
-                  const color = item.debitoAuto ? getTarjetaColor(item.debitoAuto) : null
-                  const montoARS = item.usd && dolar > 0 ? (item.monto || 0) * dolar : null
-                  const isOver = overInfo?.id === item.id
+        return (
+          <div key={grupo}>
+            {/* Group header — droppable */}
+            <div
+              onDragOver={e => handleDragOver(e, dropKey)}
+              onDrop={e => handleDrop(e, null, grupo)}
+              style={{
+                display:'flex', justifyContent:'space-between', alignItems:'center',
+                padding:'4px 6px', background:'var(--bg3)',
+                borderTop:'1px solid var(--border)',
+                outline: overKey===dropKey ? '1px dashed var(--accent)' : 'none',
+              }}
+            >
+              <span style={{fontSize:11,fontWeight:700,color:'var(--text3)',textTransform:'uppercase',letterSpacing:'.07em'}}>{grupo}</span>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:11,fontWeight:700,color:'var(--red)'}}>{fmtARS(grupoTotal)}</span>
+                <button className="s-add-btn" onClick={()=>addItem(grupo)} style={{width:18,height:18,fontSize:13}}>+</button>
+              </div>
+            </div>
 
-                  return (
-                    <tr key={item.id}
-                      draggable
-                      onDragStart={e => onDragStart(e, { ...item })}
-                      onDragOver={e => onDragOver(e, item.id, grupo)}
-                      onDrop={e => onDrop(e, item.id, grupo)}
-                      onDragEnd={reset}
-                      style={{
-                        background: color ? `${color.bg}10` : 'transparent',
-                        borderLeft: color ? `3px solid ${color.bg}` : '3px solid transparent',
-                        borderBottom: isOver ? '2px solid var(--accent)' : '1px solid var(--border)',
-                        opacity: dragItem.current?.id === item.id ? 0.35 : 1,
-                        cursor: 'grab',
-                      }}
-                    >
-                      <td style={{ padding: '2px 4px', width: 14 }}>
-                        <GripVertical size={11} style={{ color: 'var(--text3)' }} />
-                      </td>
-                      <td style={td}>
-                        <input className="inline" value={item.concepto} placeholder="Concepto"
-                          style={{ fontSize: 12, width: '100%' }}
-                          onMouseDown={e => e.stopPropagation()}
-                          onChange={e => updateField(item.id, grupo, 'concepto', e.target.value)} />
-                      </td>
-                      <td style={{ ...td, textAlign: 'right' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <NumInput value={item.monto || 0} onChange={v => updateField(item.id, grupo, 'monto', v)}
-                            style={{ width: 100, fontSize: 12 }} usd={item.usd} />
-                          {item.usd && montoARS !== null && item.monto > 0 && (
-                            <span style={{ fontSize: 10, color: 'var(--text3)' }}>{fmtARS(montoARS)}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ ...td, textAlign: 'center' }}>
-                        <button onMouseDown={e => e.stopPropagation()}
-                          onClick={() => updateField(item.id, grupo, 'usd', !item.usd)}
-                          style={{ padding: '1px 5px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 700,
-                            background: item.usd ? 'rgba(232,160,32,.2)' : 'var(--bg4)',
-                            color: item.usd ? 'var(--yellow)' : 'var(--text3)' }}>
-                          {item.usd ? 'USD' : 'ARS'}
-                        </button>
-                      </td>
-                      <td style={td}>
-                        <select value={item.debitoAuto || ''} onMouseDown={e => e.stopPropagation()}
-                          onChange={e => updateField(item.id, grupo, 'debitoAuto', e.target.value || null)}
-                          style={{
-                            fontSize: 11, padding: '2px 4px', borderRadius: 3, width: '100%', cursor: 'pointer',
-                            background: color ? color.bg : 'var(--bg3)',
-                            color: color ? '#fff' : 'var(--text2)',
-                            fontWeight: color ? 700 : 400,
-                            border: `1px solid ${color ? color.border : 'var(--border)'}`,
-                          }}>
-                          <option value="">—</option>
-                          {(tarjetas || []).map(t => <option key={t.id} value={t.nombre}>{t.nombre}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ ...td, textAlign: 'right' }}>
-                        <button className="btn-icon" onMouseDown={e => e.stopPropagation()} onClick={() => removeItem(item.id, grupo)}>
-                          <Trash2 size={11} />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </React.Fragment>
-            )
-          })}
-        </tbody>
-        <tfoot>
-          <tr style={{ background: 'var(--bg3)', borderTop: '1px solid var(--border)' }}>
-            <td colSpan={2} style={{ padding: '5px 8px', fontSize: 12, fontWeight: 700, color: 'var(--text2)' }}>Total gastos</td>
-            <td style={{ padding: '5px 8px', textAlign: 'right', fontSize: 13, fontWeight: 800, color: 'var(--red)' }} colSpan={4}>{fmtARS(totalGlobal)}</td>
-          </tr>
-        </tfoot>
-      </table>
+            {/* Items */}
+            {items.map(item => {
+              const color = item.debitoAuto ? getTarjetaColor(item.debitoAuto) : null
+              const montoARS = item.usd&&dolar>0 ? (item.monto||0)*dolar : null
+              const itemKey = `${grupo}:${item.id}`
+              const isOver = overKey===itemKey
+              const isDragging = dragItem.current?.id===item.id
+
+              return (
+                <div key={item.id}
+                  draggable
+                  onDragStart={e => handleDragStart(e, item, grupo)}
+                  onDragOver={e => handleDragOver(e, itemKey)}
+                  onDrop={e => handleDrop(e, item.id, grupo)}
+                  style={{
+                    display:'grid', gridTemplateColumns:'14px 1fr 116px 46px 130px 22px',
+                    gap:4, alignItems:'center', padding:'3px 6px',
+                    background: color ? `${color.bg}12` : 'transparent',
+                    borderLeft: color ? `3px solid ${color.bg}` : '3px solid transparent',
+                    borderBottom: isOver ? '2px solid var(--accent)' : '1px solid var(--border)',
+                    opacity: isDragging ? 0.3 : 1,
+                    cursor:'grab',
+                  }}
+                >
+                  <GripVertical size={12} style={{color:'var(--text3)'}}/>
+
+                  <input className="inline" value={item.concepto} placeholder="Concepto"
+                    style={{fontSize:14,width:'100%'}}
+                    onMouseDown={e=>e.stopPropagation()}
+                    onChange={e=>updateField(item.id,grupo,'concepto',e.target.value)}/>
+
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end'}}>
+                    <NumInput value={item.monto||0} onChange={v=>updateField(item.id,grupo,'monto',v)}
+                      style={{width:'100%',fontSize:13}} usd={item.usd}/>
+                    {item.usd&&montoARS!==null&&item.monto>0 && (
+                      <span style={{fontSize:10,color:'var(--text3)'}}>{fmtARS(montoARS)}</span>
+                    )}
+                  </div>
+
+                  <button onMouseDown={e=>e.stopPropagation()}
+                    onClick={()=>updateField(item.id,grupo,'usd',!item.usd)}
+                    style={{padding:'2px 5px',borderRadius:3,border:'none',cursor:'pointer',fontSize:11,fontWeight:700,
+                      background:item.usd?'rgba(232,160,32,.2)':'var(--bg4)',
+                      color:item.usd?'var(--yellow)':'var(--text3)'}}>
+                    {item.usd?'USD':'ARS'}
+                  </button>
+
+                  <select value={item.debitoAuto||''} onMouseDown={e=>e.stopPropagation()}
+                    onChange={e=>updateField(item.id,grupo,'debitoAuto',e.target.value||null)}
+                    style={{fontSize:12,padding:'2px 4px',borderRadius:3,width:'100%',cursor:'pointer',
+                      background:color?color.bg:'var(--bg3)',
+                      color:color?'#fff':'var(--text2)',
+                      fontWeight:color?700:400,
+                      border:`1px solid ${color?color.border:'var(--border)'}`}}>
+                    <option value="">—</option>
+                    {(tarjetas||[]).map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}
+                  </select>
+
+                  <button className="btn-icon" onMouseDown={e=>e.stopPropagation()} onClick={()=>removeItem(item.id,grupo)}>
+                    <Trash2 size={12}/>
+                  </button>
+                </div>
+              )
+            })}
+
+            {items.length===0 && (
+              <div onDragOver={e=>handleDragOver(e,dropKey)} onDrop={e=>handleDrop(e,null,grupo)}
+                style={{padding:'4px 24px',fontSize:12,color:'var(--text3)',borderBottom:'1px solid var(--border)',
+                  outline:overKey===dropKey?'1px dashed var(--accent)':'none'}}>
+                —
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Total */}
+      <div style={{display:'flex',justifyContent:'flex-end',padding:'6px 8px',borderTop:'1px solid var(--border)',background:'var(--bg3)',gap:8}}>
+        <span style={{fontSize:13,color:'var(--text2)'}}>Total</span>
+        <span style={{fontSize:14,fontWeight:800,color:'var(--red)'}}>{fmtARS(totalGlobal)}</span>
+      </div>
     </div>
   )
 }
-
-const th = { padding: '4px 8px', fontWeight: 600, fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'left' }
-const td = { padding: '3px 8px' }

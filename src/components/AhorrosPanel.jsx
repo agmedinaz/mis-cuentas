@@ -20,10 +20,14 @@ async function fetchYPF() {
   return null
 }
 
-export default function AhorrosPanel({ dolarCompra=0, dolarVenta=0, ahorroMes=0, factorUSD=0.5, factorYPF=0.5 }) {
+export default function AhorrosPanel({ dolarCompra=0, dolarVenta=0, ahorroMes=0, factorUSD=0.5, factorYPF=0.5, monthId='' }) {
   const [savings, setSavings] = useState(loadSavings())
   const [ypfPrecio, setYpfPrecio] = useState(null)
   const [loadingYPF, setLoadingYPF] = useState(false)
+
+  // Track per-month decision so it can only be done once (but undoable via global undo)
+  const decisionKey = `mc_decision_${monthId}`
+  const decision = (() => { try { return JSON.parse(localStorage.getItem(decisionKey)) } catch { return null } })()
 
   const refreshYPF = useCallback(async () => {
     setLoadingYPF(true)
@@ -49,27 +53,37 @@ export default function AhorrosPanel({ dolarCompra=0, dolarVenta=0, ahorroMes=0,
   const ypfAComprar  = precioYPF  > 0 ? montoYPF / precioYPF  : 0
 
   function aceptarSugerencia() {
-    const mov = {
-      id: uid(), fecha: new Date().toISOString(),
-      usdSumado: usdAComprar, ypfSumado: ypfAComprar,
-      montoUSD, montoYPF,
-      nota: 'Ahorro del mes aceptado',
-    }
+    const mov = { id: uid(), fecha: new Date().toISOString(), usdSumado: usdAComprar, ypfSumado: ypfAComprar, montoUSD, montoYPF, nota: 'Ahorro del mes aceptado' }
     persist({
       ...savings,
-      usdUnidades:    (savings.usdUnidades||0) + usdAComprar,
-      ypfAcciones:    (savings.ypfAcciones||0) + ypfAComprar,
+      usdUnidades:     (savings.usdUnidades||0) + usdAComprar,
+      ypfAcciones:     (savings.ypfAcciones||0) + ypfAComprar,
       ypfPrecioUltimo: ypfPrecio || savings.ypfPrecioUltimo,
-      movimientos:    [...(savings.movimientos||[]), mov],
+      movimientos:     [...(savings.movimientos||[]), mov],
     })
+    localStorage.setItem(decisionKey, JSON.stringify({ tipo: 'aceptado', fecha: new Date().toISOString(), usdSumado: usdAComprar, ypfSumado: ypfAComprar }))
   }
 
   function rechazarSugerencia() {
-    const mov = {
-      id: uid(), fecha: new Date().toISOString(),
-      rechazado: true, nota: 'Sugerencia del mes rechazada',
-    }
+    const mov = { id: uid(), fecha: new Date().toISOString(), rechazado: true, nota: 'Sugerencia del mes rechazada' }
     persist({ ...savings, movimientos: [...(savings.movimientos||[]), mov] })
+    localStorage.setItem(decisionKey, JSON.stringify({ tipo: 'rechazado', fecha: new Date().toISOString() }))
+  }
+
+  function deshacerDecision() {
+    if (!decision) return
+    if (decision.tipo === 'aceptado') {
+      // Revert the savings addition
+      persist({
+        ...savings,
+        usdUnidades:  Math.max(0, (savings.usdUnidades||0) - (decision.usdSumado||0)),
+        ypfAcciones:  Math.max(0, (savings.ypfAcciones||0) - (decision.ypfSumado||0)),
+        movimientos:  (savings.movimientos||[]).slice(0, -1),
+      })
+    } else {
+      persist({ ...savings, movimientos: (savings.movimientos||[]).slice(0, -1) })
+    }
+    localStorage.removeItem(decisionKey)
   }
 
   return (
@@ -134,22 +148,25 @@ export default function AhorrosPanel({ dolarCompra=0, dolarVenta=0, ahorroMes=0,
             </span>
             <span style={{ fontSize:13, fontWeight:600, color:'var(--accent3)' }}>{fmtARS(montoYPF)}</span>
           </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={aceptarSugerencia} style={{
-              flex:1, padding:'7px 0', borderRadius:6, border:'none', cursor:'pointer',
-              background:'rgba(34,197,94,.2)', color:'#22c55e', fontWeight:700, fontSize:13,
-              display:'flex', alignItems:'center', justifyContent:'center', gap:5,
-            }}>
-              <Check size={14}/> Aceptar
-            </button>
-            <button onClick={rechazarSugerencia} style={{
-              flex:1, padding:'7px 0', borderRadius:6, border:'none', cursor:'pointer',
-              background:'rgba(239,68,68,.1)', color:'#ef4444', fontWeight:700, fontSize:13,
-              display:'flex', alignItems:'center', justifyContent:'center', gap:5,
-            }}>
-              <X size={14}/> Rechazar
-            </button>
-          </div>
+          {decision ? (
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:6}}>
+              <span style={{fontSize:12,color:decision.tipo==='aceptado'?'var(--green)':'var(--text3)'}}>
+                {decision.tipo==='aceptado'?'✓ Aceptado':'✗ Rechazado'} · {new Date(decision.fecha).toLocaleDateString('es-AR')}
+              </span>
+              <button onClick={deshacerDecision} style={{padding:'2px 8px',borderRadius:3,border:'1px solid var(--border)',background:'none',color:'var(--text2)',cursor:'pointer',fontSize:11}}>
+                Deshacer
+              </button>
+            </div>
+          ) : (
+            <div style={{display:'flex',gap:6,marginTop:6}}>
+              <button onClick={aceptarSugerencia} style={{padding:'3px 10px',borderRadius:4,border:'1px solid rgba(52,201,122,.4)',background:'rgba(52,201,122,.1)',color:'var(--green)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
+                <Check size={12}/> Aceptar
+              </button>
+              <button onClick={rechazarSugerencia} style={{padding:'3px 10px',borderRadius:4,border:'1px solid rgba(232,85,85,.3)',background:'rgba(232,85,85,.08)',color:'var(--red)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
+                <X size={12}/> Rechazar
+              </button>
+            </div>
+          )}
         </div>
       )}
 

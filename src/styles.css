@@ -14,10 +14,10 @@
   --green:   #34c97a;
   --red:     #e85555;
   --yellow:  #e8a020;
-  --text:    #dcdce8;
-  --text2:   #8a8aa8;
-  --text3:   #50506a;
-  font-size: 14px;
+  --text:    #e8e8f4;
+  --text2:   #a0a0c0;
+  --text3:   #686888;
+  font-size: 15px;
 }
 
 html, body, #root {
