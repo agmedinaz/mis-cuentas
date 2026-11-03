@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import {
-  LayoutDashboard, Wallet, CreditCard, PiggyBank,
-  ShoppingBag, Plus, ChevronRight, Settings, Calendar
+  LayoutDashboard, Wallet, ShoppingBag, Plus,
+  Calendar, BarChart2, FileText
 } from 'lucide-react'
 import { listMonths, loadMonth, saveMonth, emptyMonth, monthName } from './store'
 import { ToastContainer, useToast } from './useToast.jsx'
 import Dashboard from './pages/Dashboard'
 import MonthEditor from './pages/MonthEditor'
 import PendingPurchases from './pages/PendingPurchases'
+import Estadisticas from './pages/Estadisticas'
+import Historial from './pages/Historial'
 import NewMonthModal from './components/NewMonthModal'
 
 export default function App() {
@@ -17,7 +19,6 @@ export default function App() {
   const [showNewMonth, setShowNewMonth] = useState(false)
   const { toasts, toast } = useToast()
 
-  // Cargar lista de meses al inicio
   useEffect(() => {
     const list = listMonths()
     setMonths(list)
@@ -50,6 +51,13 @@ export default function App() {
 
   const activeMonthMeta = months.find(m => m.id === activeMonthId)
 
+  const navItems = [
+    { key: 'dashboard', icon: LayoutDashboard, label: 'Resumen' },
+    { key: 'stats', icon: BarChart2, label: 'Estadísticas' },
+    { key: 'historial', icon: FileText, label: 'Historial PDF' },
+    { key: 'pending', icon: ShoppingBag, label: 'Compras pendientes' },
+  ]
+
   return (
     <div className="app-shell">
       {/* ── Sidebar ─────────────────────────────────────────── */}
@@ -61,20 +69,16 @@ export default function App() {
 
         <div className="sidebar-section">
           <div className="sidebar-label">General</div>
-          <div
-            className={`sidebar-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            <LayoutDashboard size={16} />
-            <span>Resumen</span>
-          </div>
-          <div
-            className={`sidebar-item ${activeTab === 'pending' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pending')}
-          >
-            <ShoppingBag size={16} />
-            <span>Compras pendientes</span>
-          </div>
+          {navItems.map(({ key, icon: Icon, label }) => (
+            <div
+              key={key}
+              className={`sidebar-item ${activeTab === key ? 'active' : ''}`}
+              onClick={() => setActiveTab(key)}
+            >
+              <Icon size={16} />
+              <span>{label}</span>
+            </div>
+          ))}
         </div>
 
         <div className="sidebar-section" style={{ marginTop: 12 }}>
@@ -120,6 +124,34 @@ export default function App() {
           </>
         )}
 
+        {activeTab === 'stats' && (
+          <>
+            <div className="topbar">
+              <div>
+                <div className="topbar-title">Estadísticas</div>
+                <div className="topbar-sub">Promedios y tendencias por período</div>
+              </div>
+            </div>
+            <div className="page">
+              <Estadisticas months={months} />
+            </div>
+          </>
+        )}
+
+        {activeTab === 'historial' && (
+          <>
+            <div className="topbar">
+              <div>
+                <div className="topbar-title">Historial y PDF</div>
+                <div className="topbar-sub">Resumen detallado de tus meses</div>
+              </div>
+            </div>
+            <div className="page">
+              <Historial months={months} toast={toast} />
+            </div>
+          </>
+        )}
+
         {activeTab === 'editor' && activeMonthId && (
           <>
             <div className="topbar">
@@ -145,7 +177,7 @@ export default function App() {
             <div className="topbar">
               <div>
                 <div className="topbar-title">Compras pendientes</div>
-                <div className="topbar-sub">Compras en cuotas que impactan en el libre de cada mes</div>
+                <div className="topbar-sub">Compras que impactan en el libre de cada mes</div>
               </div>
             </div>
             <div className="page">
@@ -167,7 +199,6 @@ export default function App() {
         )}
       </main>
 
-      {/* ── Modales ──────────────────────────────────────────── */}
       {showNewMonth && (
         <NewMonthModal
           existingMonths={months}
