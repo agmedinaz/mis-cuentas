@@ -250,8 +250,15 @@ export function calcMonth(data, pendingPurchases = [], dolarVenta = 0, dolarComp
     return a + (r.usd ? m * venta : m)
   }, 0)
 
+  // Otros gastos (no en tarjeta, no fijos categorizados)
+  const otrosGastos = data.otrosGastos || []
+  const sumaOtros   = otrosGastos.reduce((a, g) => {
+    const m = parseFloat(g.monto) || 0
+    return a + (g.usd && venta > 0 ? m * venta : m)
+  }, 0)
+
   // ── Totales ────────────────────────────────────────────────────────
-  const gastosTotales = sumaGastosFijosNetos + sumaTarjetas
+  const gastosTotales = sumaGastosFijosNetos + sumaTarjetas + sumaOtros
   // Presupuesto sobrante = ingreso disponible para gastos − gastos totales + reintegros
   const presupuesto   = ingresosParaGastos - gastosTotales + totalReintegros
 
@@ -279,6 +286,7 @@ export function calcMonth(data, pendingPurchases = [], dolarVenta = 0, dolarComp
     sumaTarjetas,
     tarjetasDetalle,
     debitosAutoXTarjeta,
+    sumaOtros,
     gastosTotales,
     totalReintegros,
     presupuesto,

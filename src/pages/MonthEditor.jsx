@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Trash2, CreditCard, GripVertical, Undo2, Redo2, MoreHorizontal } from 'lucide-react'
+import { Trash2, CreditCard, GripVertical, Undo2, Redo2 } from 'lucide-react'
 import {
   loadMonth, saveMonth, calcMonth, fmtARS, fmtUSD, uid,
   loadPendingPurchases, monthName, getTarjetaColor,
@@ -18,7 +18,6 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
   const [pending, setPending] = useState([])
   const [activeTab, setActiveTab] = useState('resumen')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
 
   // Undo/redo stacks — snapshots del estado del mes
   const past   = useRef([])   // stack de estados anteriores
@@ -160,40 +159,17 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
             }}>
             <Redo2 size={13} /> Rehacer
           </button>
-          {/* Menú con eliminar mes (escondido) */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowMenu(m => !m)}
-              style={{
-                background: 'none', border: '1px solid var(--border)', borderRadius: 6,
-                color: 'var(--text3)', padding: '4px 8px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center',
-              }}>
-              <MoreHorizontal size={14} />
-            </button>
-            {showMenu && (
-              <>
-                <div onClick={() => setShowMenu(false)}
-                  style={{ position:'fixed', inset:0, zIndex:99 }} />
-                <div style={{
-                  position:'absolute', right:0, top:'calc(100% + 4px)',
-                  background:'var(--bg2)', border:'1px solid var(--border)',
-                  borderRadius:8, padding:'4px', minWidth:160, zIndex:100,
-                  boxShadow:'0 4px 16px rgba(0,0,0,.3)',
-                }}>
-                  <button
-                    onClick={() => { setShowMenu(false); setShowDeleteConfirm(true) }}
-                    style={{
-                      width:'100%', padding:'8px 12px', borderRadius:5, border:'none',
-                      background:'none', color:'#ef4444', cursor:'pointer', fontSize:13,
-                      textAlign:'left', display:'flex', alignItems:'center', gap:8,
-                    }}>
-                    <Trash2 size={13} /> Eliminar este mes
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          {/* Eliminar mes */}
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            title="Eliminar este mes"
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              color: 'var(--text3)', padding: '4px 8px', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 4, fontSize: 12,
+            }}>
+            <Trash2 size={13} /> Eliminar mes
+          </button>
         </div>
       </div>
 
