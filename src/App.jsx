@@ -4,7 +4,7 @@ import {
   ShoppingBag, Plus, ChevronRight, Settings, Calendar
 } from 'lucide-react'
 import { listMonths, loadMonth, saveMonth, emptyMonth, monthName } from './store'
-import { ToastContainer, useToast } from './useToast'
+import { ToastContainer, useToast } from './useToast.jsx'
 import Dashboard from './pages/Dashboard'
 import MonthEditor from './pages/MonthEditor'
 import PendingPurchases from './pages/PendingPurchases'
