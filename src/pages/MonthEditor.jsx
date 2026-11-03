@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Plus, Trash2, RefreshCcw, TrendingUp, CreditCard, GripVertical } from 'lucide-react'
+import { Trash2, CreditCard, GripVertical, Undo2, Redo2, MoreHorizontal } from 'lucide-react'
 import {
   loadMonth, saveMonth, calcMonth, fmtARS, fmtUSD, uid,
-  loadPendingPurchases, monthName, getTarjetaColor, listMonths,
+  loadPendingPurchases, monthName, getTarjetaColor,
 } from '../store'
 import TarjetaSection from '../components/TarjetaSection'
 import GastosFijosSection from '../components/GastosFijosSection'
@@ -11,24 +11,68 @@ import AhorrosPanel from '../components/AhorrosPanel'
 import DolarWidget, { useDolar } from '../components/DolarWidget'
 import NumInput from '../components/NumInput'
 
+const MAX_HISTORY = 40
+
 export default function MonthEditor({ monthId, onRefresh, toast }) {
   const [data, setData]       = useState(null)
   const [pending, setPending] = useState([])
   const [activeTab, setActiveTab] = useState('resumen')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+
+  // Undo/redo stacks — snapshots del estado del mes
+  const past   = useRef([])   // stack de estados anteriores
+  const future = useRef([])   // stack de estados "rehacibles"
+
   const { compra: dolarCompra, venta: dolarVenta, loading: dolarLoading,
           lastUpdate, error: dolarError, refresh: refreshDolar } = useDolar()
 
   useEffect(() => {
     const d = loadMonth(monthId)
-    if (d) setData(d)
+    if (d) { setData(d); past.current = []; future.current = [] }
     setPending(loadPendingPurchases())
   }, [monthId])
 
-  const save = useCallback((updated) => {
+  // save guarda en localStorage Y empuja el estado anterior al historial
+  const save = useCallback((updated, skipHistory = false) => {
+    if (!skipHistory && data) {
+      past.current = [...past.current.slice(-MAX_HISTORY), JSON.stringify(data)]
+      future.current = []   // al hacer un cambio nuevo se pierde el future
+    }
     saveMonth(updated)
     setData({ ...updated })
     onRefresh()
-  }, [onRefresh])
+  }, [data, onRefresh])
+
+  function undo() {
+    if (!past.current.length) return
+    const prev = JSON.parse(past.current.pop())
+    future.current = [JSON.stringify(data), ...future.current.slice(0, MAX_HISTORY)]
+    saveMonth(prev)
+    setData({ ...prev })
+    onRefresh()
+    toast && toast('Cambio deshecho', 'success', 1500)
+  }
+
+  function redo() {
+    if (!future.current.length) return
+    const next = JSON.parse(future.current.shift())
+    past.current = [...past.current.slice(-MAX_HISTORY), JSON.stringify(data)]
+    saveMonth(next)
+    setData({ ...next })
+    onRefresh()
+    toast && toast('Cambio rehecho', 'success', 1500)
+  }
+
+  // Keyboard shortcuts: Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z)
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   function updateListItem(listKey, id, field, value) {
     save({ ...data, [listKey]: (data[listKey] || []).map(i => i.id === id ? { ...i, [field]: value } : i) })
@@ -37,6 +81,7 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
     save({ ...data, [listKey]: [...(data[listKey] || []), { id: uid(), concepto: '', monto: 0, usd: false, ...defaults }] })
   }
   function removeFromList(listKey, id) {
+    // No confirmation dialog — undo handles it
     save({ ...data, [listKey]: (data[listKey] || []).filter(i => i.id !== id) })
   }
   function reorderList(listKey, newList) {
@@ -45,14 +90,16 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
   function updateTarjeta(tid, changes) {
     save({ ...data, tarjetas: data.tarjetas.map(t => t.id === tid ? { ...t, ...changes } : t) })
   }
-  function deleteMonth() {
-    if (!window.confirm(`¿Eliminar ${monthName(data.month)} ${data.year}? Esta acción no se puede deshacer.`)) return
+  function confirmDeleteMonth() {
     localStorage.removeItem('mc_' + data.id)
     onRefresh()
     window.location.reload()
   }
 
   if (!data) return <div style={{ padding: 24, color: 'var(--text3)' }}>Cargando…</div>
+
+  const canUndo = past.current.length > 0
+  const canRedo = future.current.length > 0
 
   const sd = {  // safeData — compatibilidad con datos viejos
     ingresosFijos:  data.ingresosFijos  || data.ingresos || [],
@@ -82,19 +129,103 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
 
   return (
     <>
-      {/* Top bar dólar + eliminar mes */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      {/* Top bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8 }}>
         <DolarWidget compra={compra} venta={venta}
           loading={dolarLoading} lastUpdate={lastUpdate}
           error={dolarError} onRefresh={refreshDolar} compact />
-        <button onClick={deleteMonth} style={{
-          background: 'none', border: '1px solid var(--border)', borderRadius: 6,
-          color: 'var(--text3)', fontSize: 12, padding: '4px 10px', cursor: 'pointer',
-        }}>
-          <Trash2 size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-          Eliminar mes
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Undo */}
+          <button
+            onClick={undo} disabled={!canUndo}
+            title="Deshacer (Ctrl+Z)"
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              color: canUndo ? 'var(--text2)' : 'var(--text3)', padding: '4px 8px',
+              cursor: canUndo ? 'pointer' : 'default', opacity: canUndo ? 1 : 0.4,
+              display: 'flex', alignItems: 'center', gap: 4, fontSize: 12,
+            }}>
+            <Undo2 size={13} /> Deshacer
+          </button>
+          {/* Redo */}
+          <button
+            onClick={redo} disabled={!canRedo}
+            title="Rehacer (Ctrl+Y)"
+            style={{
+              background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+              color: canRedo ? 'var(--text2)' : 'var(--text3)', padding: '4px 8px',
+              cursor: canRedo ? 'pointer' : 'default', opacity: canRedo ? 1 : 0.4,
+              display: 'flex', alignItems: 'center', gap: 4, fontSize: 12,
+            }}>
+            <Redo2 size={13} /> Rehacer
+          </button>
+          {/* Menú con eliminar mes (escondido) */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowMenu(m => !m)}
+              style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: 6,
+                color: 'var(--text3)', padding: '4px 8px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center',
+              }}>
+              <MoreHorizontal size={14} />
+            </button>
+            {showMenu && (
+              <>
+                <div onClick={() => setShowMenu(false)}
+                  style={{ position:'fixed', inset:0, zIndex:99 }} />
+                <div style={{
+                  position:'absolute', right:0, top:'calc(100% + 4px)',
+                  background:'var(--bg2)', border:'1px solid var(--border)',
+                  borderRadius:8, padding:'4px', minWidth:160, zIndex:100,
+                  boxShadow:'0 4px 16px rgba(0,0,0,.3)',
+                }}>
+                  <button
+                    onClick={() => { setShowMenu(false); setShowDeleteConfirm(true) }}
+                    style={{
+                      width:'100%', padding:'8px 12px', borderRadius:5, border:'none',
+                      background:'none', color:'#ef4444', cursor:'pointer', fontSize:13,
+                      textAlign:'left', display:'flex', alignItems:'center', gap:8,
+                    }}>
+                    <Trash2 size={13} /> Eliminar este mes
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Modal confirmar eliminar mes */}
+      {showDeleteConfirm && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,.6)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:20,
+        }} onClick={() => setShowDeleteConfirm(false)}>
+          <div style={{
+            background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:12,
+            padding:24, maxWidth:400, width:'100%',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>
+              Eliminar {monthName(sd.month)} {sd.year}
+            </div>
+            <div style={{ fontSize:13, color:'var(--text2)', marginBottom:16 }}>
+              Esta acción es permanente y no se puede deshacer. Todos los datos del mes se van a borrar.
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+              <button onClick={() => setShowDeleteConfirm(false)} style={{
+                padding:'7px 16px', borderRadius:6, border:'1px solid var(--border)',
+                background:'none', color:'var(--text2)', cursor:'pointer', fontSize:13,
+              }}>Cancelar</button>
+              <button onClick={confirmDeleteMonth} style={{
+                padding:'7px 16px', borderRadius:6, border:'none',
+                background:'#ef4444', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700,
+              }}>Sí, eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="tabs">
         {tabs.map(t => (
