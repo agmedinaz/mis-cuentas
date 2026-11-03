@@ -21,7 +21,7 @@ async function fetchYPF() {
   return null
 }
 
-export default function AhorrosPanel({ dolar }) {
+export default function AhorrosPanel({ dolarCompra = 0, dolarVenta = 0 }) {
   const [savings, setSavings] = useState(loadSavings())
   const [ypfPrecio, setYpfPrecio] = useState(null)
   const [loadingYPF, setLoadingYPF] = useState(false)
@@ -43,7 +43,9 @@ export default function AhorrosPanel({ dolar }) {
   }
 
   // Valores actuales
-  const valorUSD = (savings.usdAcciones || 0) * (dolar || 0)
+  // Para saber cuánto vale en pesos usamos cotización COMPRA
+  // (lo que el banco te pagaría si quisieras vender tus dólares)
+  const valorUSD = (savings.usdAcciones || 0) * (dolarCompra || 0)
   const valorYPF = (savings.ypfAcciones || 0) * (ypfPrecio || savings.ypfPrecioUltimo || 0)
   const totalARS = valorUSD + valorYPF
 
@@ -103,12 +105,15 @@ export default function AhorrosPanel({ dolar }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
         {/* USD */}
         <div style={{ background: 'var(--bg3)', borderRadius: 8, padding: '12px 14px' }}>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
-            <span>USD (dólares)</span>
-            <span style={{ color: 'var(--green)', fontWeight: 600 }}>× {fmtARS(dolar || 0)}</span>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>
+            USD (dólares)
           </div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>{fmtUSD(savings.usdAcciones || 0)}</div>
-          <div style={{ fontSize: 13, color: 'var(--green)' }}>{fmtARS(valorUSD)}</div>
+          <div style={{ fontSize: 13, color: 'var(--green)', fontWeight: 600 }}>{fmtARS(valorUSD)}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3, lineHeight: 1.5 }}>
+            Valuado a compra {fmtARS(dolarCompra || 0)}
+            {dolarVenta > 0 && <><br />Costo comprar: {fmtARS(dolarVenta || 0)}/USD</>}
+          </div>
           <div style={{ marginTop: 8 }}>
             <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 3 }}>Cantidad (editar directo)</div>
             <NumInput

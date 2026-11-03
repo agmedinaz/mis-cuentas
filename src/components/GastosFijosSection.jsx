@@ -127,8 +127,8 @@ export default function GastosFijosSection({ gastosFijos, tarjetas, onChange, do
                           usd={item.usd}
                         />
                         {item.usd && dolar > 0 && item.monto > 0 && (
-                          <span style={{ fontSize: 10, color: 'var(--green)', whiteSpace: 'nowrap' }}>
-                            = {fmtARS(montoARS)}
+                          <span style={{ fontSize: 10, color: 'var(--yellow)', whiteSpace: 'nowrap' }}>
+                            = {fmtARS(montoARS)} <span style={{ opacity: .7 }}>(venta)</span>
                           </span>
                         )}
                       </div>
@@ -161,14 +161,17 @@ export default function GastosFijosSection({ gastosFijos, tarjetas, onChange, do
 
                 {/* USD toggle para streaming */}
                 {grupo === 'Streaming' && items.some(i => i.usd) && dolar > 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4, display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
                     <span>Total streaming:</span>
                     <span style={{ fontWeight: 600, color: 'var(--green)' }}>
                       USD {items.filter(i => i.usd).reduce((a, i) => a + (i.monto || 0), 0).toFixed(2)}
                     </span>
-                    <span>→</span>
+                    <span style={{ color: 'var(--border)' }}>→</span>
                     <span style={{ fontWeight: 600 }}>
                       {fmtARS(items.filter(i => i.usd).reduce((a, i) => a + (i.monto || 0) * dolar, 0))}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--yellow)', background: 'rgba(245,158,11,.1)', padding: '2px 6px', borderRadius: 4 }}>
+                      × venta {fmtARS(dolar)}
                     </span>
                   </div>
                 )}

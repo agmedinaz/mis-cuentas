@@ -165,8 +165,12 @@ export function removePendingPurchase(id) {
 }
 
 // ── Cálculos financieros ─────────────────────────────────────────────────────
-export function calcMonth(data, pendingPurchases = [], dolarActual = 0) {
-  const dolar = dolarActual || data.dolar || 0
+// dolarCompra: precio al que el banco te compra tus dólares (para valuar ahorros en ARS)
+// dolarVenta:  precio al que el banco te vende dólares (para gastos en USD, streaming, comprar USD)
+export function calcMonth(data, pendingPurchases = [], dolarVenta = 0, dolarCompra = 0) {
+  // Fallback: si solo se pasa un valor, usarlo para ambos (compatibilidad)
+  const venta  = dolarVenta  || data.dolar || 0
+  const compra = dolarCompra || dolarVenta || data.dolar || 0
 
   // Ingresos brutos
   const ingresosBrutos = sumList(data.ingresos, 'monto')
@@ -177,10 +181,10 @@ export function calcMonth(data, pendingPurchases = [], dolarActual = 0) {
   // Ingresos netos = brutos − libre − ahorro  (B5-B8-B9)
   const ingresosNetos = ingresosBrutos - (data.libreBase || 0) - Math.max(0, montoAhorro)
 
-  // Gastos fijos — los de débito automático NO se suman aquí (ya van en tarjeta)
-  // pero sí los mostramos agrupados
+  // Gastos fijos en USD se convierten con cotización VENTA
+  // (porque para pagarlos tenés que comprar dólares al banco)
   const gastosFijosConvertidos = (data.gastosFijos || []).map(g => {
-    const montoARS = g.usd && dolar > 0 ? (g.monto || 0) * dolar : (g.monto || 0)
+    const montoARS = g.usd && venta > 0 ? (g.monto || 0) * venta : (g.monto || 0)
     return { ...g, montoARS }
   })
 
@@ -228,14 +232,11 @@ export function calcMonth(data, pendingPurchases = [], dolarActual = 0) {
   const sumaPending = pendingForThisMonth.reduce((a, p) => a + (p.monto || 0), 0)
   const libreDisponible = (data.libreBase || 0) - sumaPending
 
-  // Streaming total en USD
+  // Streaming total en USD (informativo)
   const streamingUSD = gastosFijosConvertidos
     .filter(g => g.grupo === 'Streaming' && g.usd)
     .reduce((a, g) => a + (g.monto || 0), 0)
 
-  // Proyección próximos meses (lógica de fila 40 de la planilla)
-  // A40 = gastos_tarjeta_actuales − las que tienen 0 cuotas restantes
-  // Cada mes siguiente resta las que tienen exactamente N cuotas restantes
   const proyeccion = calcProyeccion(data, sumaGastosFijosNetos, ingresosBrutos, data.apartado, data.libreBase)
 
   return {
@@ -257,7 +258,8 @@ export function calcMonth(data, pendingPurchases = [], dolarActual = 0) {
     libreDisponible,
     streamingUSD,
     proyeccion,
-    dolar,
+    dolarVenta: venta,   // precio de venta (para gastos en USD)
+    dolarCompra: compra, // precio de compra (para valuar ahorros)
   }
 }
 

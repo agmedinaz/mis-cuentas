@@ -13,7 +13,7 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
   const [data, setData] = useState(null)
   const [pending, setPending] = useState([])
   const [activeTab, setActiveTab] = useState('resumen')
-  const { dolar, loading: dolarLoading, lastUpdate, error: dolarError, refresh: refreshDolar } = useDolar()
+  const { compra: dolarCompra, venta: dolarVenta, loading: dolarLoading, lastUpdate, error: dolarError, refresh: refreshDolar } = useDolar()
 
   useEffect(() => {
     const d = loadMonth(monthId)
@@ -51,8 +51,9 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
 
   if (!data) return <div style={{ padding: 24, color: 'var(--text3)' }}>Cargando…</div>
 
-  const dolarActual = dolar || data.dolar || 0
-  const calc = calcMonth(data, pending, dolarActual)
+  const ventaActual  = dolarVenta  || data.dolarVenta  || data.dolar || 0
+  const compraActual = dolarCompra || data.dolarCompra || data.dolar || 0
+  const calc = calcMonth(data, pending, ventaActual, compraActual)
 
   const tabs = [
     { key: 'resumen', label: 'Resumen' },
@@ -68,7 +69,7 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
     <>
       {/* Dólar widget compacto en cabecera */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <DolarWidget dolar={dolarActual} loading={dolarLoading} lastUpdate={lastUpdate} error={dolarError} onRefresh={refreshDolar} compact />
+        <DolarWidget compra={compraActual} venta={ventaActual} loading={dolarLoading} lastUpdate={lastUpdate} error={dolarError} onRefresh={refreshDolar} compact />
       </div>
 
       <div className="tabs">
@@ -200,7 +201,7 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
           gastosFijos={data.gastosFijos || []}
           tarjetas={data.tarjetas || []}
           onChange={gf => save({ ...data, gastosFijos: gf })}
-          dolar={dolarActual}
+          dolar={ventaActual}
         />
       )}
 
@@ -275,9 +276,9 @@ export default function MonthEditor({ monthId, onRefresh, toast }) {
       {/* ── AHORROS ──────────────────────────────────────────── */}
       {activeTab === 'ahorros' && (
         <>
-          <DolarWidget dolar={dolarActual} loading={dolarLoading} lastUpdate={lastUpdate} error={dolarError} onRefresh={refreshDolar} />
+          <DolarWidget compra={compraActual} venta={ventaActual} loading={dolarLoading} lastUpdate={lastUpdate} error={dolarError} onRefresh={refreshDolar} />
           <div style={{ marginTop: 16 }}>
-            <AhorrosPanel dolar={dolarActual} />
+            <AhorrosPanel dolarCompra={compraActual} dolarVenta={ventaActual} />
           </div>
         </>
       )}
