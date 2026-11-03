@@ -1,109 +1,144 @@
 import React, { useState } from 'react'
-import { Plus, Trash2, ChevronDown, CreditCard } from 'lucide-react'
+import { Trash2, ChevronDown } from 'lucide-react'
 import { fmtARS, uid, getTarjetaColor } from '../store'
 import NumInput from './NumInput'
 
 export default function TarjetaSection({ tarjeta, onUpdate, onRemove, debitosAuto = 0 }) {
   const [open, setOpen] = useState(true)
-  const color = getTarjetaColor(tarjeta.nombre)
+  const c = getTarjetaColor(tarjeta.nombre)
+  const cuotasSum = (tarjeta.items || []).reduce((a, i) => a + (parseFloat(i.monto) || 0), 0)
+  const total = (tarjeta.mantenimiento || 0) + cuotasSum + debitosAuto
 
-  const totalCuotas = (tarjeta.items || []).reduce((a, i) => a + (parseFloat(i.monto) || 0), 0)
-  const totalPropio = (tarjeta.mantenimiento || 0) + totalCuotas
-  const totalConDebitos = totalPropio + debitosAuto
-
-  function updateItem(id, field, value) {
-    onUpdate({ items: tarjeta.items.map(i => i.id === id ? { ...i, [field]: value } : i) })
+  function updItem(id, field, val) {
+    onUpdate({ items: tarjeta.items.map(i => i.id === id ? { ...i, [field]: val } : i) })
   }
   function addItem() {
     onUpdate({ items: [...(tarjeta.items || []), { id: uid(), concepto: '', monto: 0, cuota: '', cuotasRestantes: 0 }] })
   }
-  function removeItem(id) { onUpdate({ items: tarjeta.items.filter(i => i.id !== id) }) }
+  function rmItem(id) { onUpdate({ items: tarjeta.items.filter(i => i.id !== id) }) }
 
-  function getCuotasRestantes(item) {
-    if (item.cuotasRestantes !== undefined && item.cuotasRestantes !== null) return item.cuotasRestantes
-    const p = (item.cuota || '').split('/')
-    if (p.length === 2) return Math.max(0, parseInt(p[1]) - parseInt(p[0]))
-    return 0
-  }
-  function updateCuota(id, cuotaStr) {
-    const p = cuotaStr.split('/')
-    const restantes = p.length === 2 ? Math.max(0, parseInt(p[1]) - parseInt(p[0])) : 0
-    onUpdate({ items: tarjeta.items.map(i => i.id === id ? { ...i, cuota: cuotaStr, cuotasRestantes: restantes } : i) })
+  function updCuota(id, str) {
+    const p = str.split('/')
+    const r = p.length === 2 ? Math.max(0, parseInt(p[1]) - parseInt(p[0])) : 0
+    onUpdate({ items: tarjeta.items.map(i => i.id === id ? { ...i, cuota: str, cuotasRestantes: r } : i) })
   }
 
   return (
-    <div style={{ border: `2px solid ${color.bg}`, borderRadius: 12, marginBottom: 14, overflow: 'hidden' }}>
+    <div style={{ marginBottom: 10, border: `1px solid ${c.bg}55`, borderRadius: 6, overflow: 'hidden' }}>
+      {/* Header — color de tarjeta, compacto */}
       <div
-        style={{ background: `linear-gradient(135deg, ${color.bg}ee 0%, ${color.bg}99 100%)`, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
         onClick={() => setOpen(o => !o)}
+        style={{
+          background: c.bg, padding: '6px 10px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <CreditCard size={16} style={{ color: color.text }} />
           <input
-            value={tarjeta.nombre} onClick={e => e.stopPropagation()}
+            value={tarjeta.nombre}
+            onClick={e => e.stopPropagation()}
             onChange={e => onUpdate({ nombre: e.target.value })}
-            style={{ background: 'transparent', border: 'none', outline: 'none', fontWeight: 800, fontSize: 15, color: color.text, cursor: 'text', width: 'auto', maxWidth: 160 }}
+            style={{
+              background: 'transparent', border: 'none', outline: 'none',
+              fontWeight: 700, fontSize: 13, color: '#fff', cursor: 'text',
+            }}
           />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: color.text }}>{fmtARS(totalConDebitos)}</div>
-            {debitosAuto > 0 && <div style={{ fontSize: 11, color: `${color.text}99` }}>propio {fmtARS(totalPropio)} + auto {fmtARS(debitosAuto)}</div>}
-          </div>
-          <ChevronDown size={16} style={{ color: color.text, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{fmtARS(total)}</span>
+          <ChevronDown size={14} style={{ color: '#fff', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
         </div>
       </div>
 
       {open && (
-        <div style={{ padding: '14px 16px', background: `${color.bg}08` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, marginBottom: 10, borderBottom: `1px solid ${color.bg}44` }}>
-            <span style={{ fontSize: 13, color: 'var(--text2)' }}>Mantenimiento / cargo fijo</span>
-            <NumInput value={tarjeta.mantenimiento || 0} onChange={v => onUpdate({ mantenimiento: v })} style={{ width: 120, fontSize: 13 }} />
-          </div>
+        <div style={{ padding: '0 0 6px' }}>
+          {/* Tabla de items — igual que la planilla */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg3)' }}>
+                <th style={th}>Concepto</th>
+                <th style={{ ...th, textAlign: 'right' }}>Monto</th>
+                <th style={{ ...th, textAlign: 'center' }}>Cuota</th>
+                <th style={{ ...th, textAlign: 'center' }}>Quedan</th>
+                <th style={{ ...th, width: 20 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Mantenimiento */}
+              <tr style={rowStyle}>
+                <td style={td}>
+                  <span style={{ color: 'var(--text3)', fontSize: 11 }}>Mantenimiento</span>
+                </td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  <NumInput value={tarjeta.mantenimiento || 0} onChange={v => onUpdate({ mantenimiento: v })} style={{ width: 100, fontSize: 12, textAlign: 'right' }} />
+                </td>
+                <td style={td} /><td style={td} /><td style={td} />
+              </tr>
 
-          {(tarjeta.items || []).length > 0 && (
-            <div style={{ marginBottom: 6 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 72px 80px 20px', gap: 6, fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4, padding: '0 4px' }}>
-                <span>Concepto</span><span style={{ textAlign: 'right' }}>Monto</span><span style={{ textAlign: 'center' }}>Cuota</span><span style={{ textAlign: 'center' }}>Quedan</span><span />
-              </div>
-              {tarjeta.items.map(item => {
-                const restantes = getCuotasRestantes(item)
+              {/* Cuotas */}
+              {(tarjeta.items || []).map(item => {
+                const r = item.cuotasRestantes ?? (() => {
+                  const p = (item.cuota || '').split('/')
+                  return p.length === 2 ? Math.max(0, parseInt(p[1]) - parseInt(p[0])) : 0
+                })()
                 return (
-                  <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 72px 80px 20px', gap: 6, alignItems: 'center', padding: '4px 4px', borderBottom: `1px solid ${color.bg}22` }}>
-                    <input className="inline" value={item.concepto} placeholder="Concepto"
-                      style={{ fontSize: 13, background: 'transparent', borderColor: `${color.bg}44` }}
-                      onChange={e => updateItem(item.id, 'concepto', e.target.value)} />
-                    <NumInput value={item.monto || 0} onChange={v => updateItem(item.id, 'monto', v)} style={{ fontSize: 13 }} />
-                    <input className="inline" value={item.cuota || ''} placeholder="2/6"
-                      style={{ fontSize: 12, textAlign: 'center', background: 'transparent', borderColor: `${color.bg}44` }}
-                      onChange={e => updateCuota(item.id, e.target.value)} />
-                    <div style={{ textAlign: 'center' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                        background: restantes === 0 ? 'rgba(34,197,94,.15)' : restantes <= 2 ? 'rgba(245,158,11,.15)' : `${color.bg}33`,
-                        color: restantes === 0 ? 'var(--green)' : restantes <= 2 ? 'var(--yellow)' : color.text }}>
-                        {restantes === 0 ? '✓ última' : `${restantes} más`}
+                  <tr key={item.id} style={rowStyle}>
+                    <td style={td}>
+                      <input className="inline" value={item.concepto} placeholder="Concepto"
+                        style={{ fontSize: 12 }}
+                        onChange={e => updItem(item.id, 'concepto', e.target.value)} />
+                    </td>
+                    <td style={{ ...td, textAlign: 'right' }}>
+                      <NumInput value={item.monto || 0} onChange={v => updItem(item.id, 'monto', v)} style={{ width: 100, fontSize: 12 }} />
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <input className="inline" value={item.cuota || ''} placeholder="2/6"
+                        style={{ width: 44, fontSize: 12, textAlign: 'center' }}
+                        onChange={e => updCuota(item.id, e.target.value)} />
+                    </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                        background: r === 0 ? 'rgba(52,201,122,.15)' : r <= 2 ? 'rgba(232,160,32,.15)' : 'var(--bg4)',
+                        color: r === 0 ? 'var(--green)' : r <= 2 ? 'var(--yellow)' : 'var(--text3)',
+                      }}>
+                        {r === 0 ? 'última' : r}
                       </span>
-                    </div>
-                    <button className="btn-icon" onClick={() => removeItem(item.id)}><Trash2 size={12} /></button>
-                  </div>
+                    </td>
+                    <td style={{ ...td, textAlign: 'right' }}>
+                      <button className="btn-icon" onClick={() => rmItem(item.id)}><Trash2 size={11} /></button>
+                    </td>
+                  </tr>
                 )
               })}
-            </div>
-          )}
 
-          {debitosAuto > 0 && (
-            <div style={{ background: `${color.bg}22`, borderRadius: 6, padding: '8px 10px', marginTop: 8, marginBottom: 4, fontSize: 12, color: color.text, border: `1px dashed ${color.bg}` }}>
-              <span style={{ fontWeight: 600 }}>Débitos automáticos: {fmtARS(debitosAuto)}</span>
-              <span style={{ color: 'var(--text3)', marginLeft: 6 }}>(definidos en Gastos fijos)</span>
-            </div>
-          )}
+              {/* Débitos auto */}
+              {debitosAuto > 0 && (
+                <tr>
+                  <td colSpan={5} style={{ ...td, fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', paddingTop: 4 }}>
+                    + {fmtARS(debitosAuto)} en débitos automáticos (desde Gastos)
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-            <button className="btn-add" onClick={addItem}><Plus size={13} /> Agregar cuota / compra</button>
-            <button className="btn btn-danger" style={{ fontSize: 11, padding: '3px 8px' }} onClick={onRemove}><Trash2 size={11} /> Quitar</button>
+          {/* Footer */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 10px 2px' }}>
+            <button className="s-add-btn" onClick={addItem}>+</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text2)' }}>
+                Total: {fmtARS(total)}
+              </span>
+              <button className="btn-icon" onClick={onRemove} title="Eliminar tarjeta"><Trash2 size={12} /></button>
+            </div>
           </div>
         </div>
       )}
     </div>
   )
 }
+
+const th = { padding: '4px 8px', fontWeight: 600, fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'left', borderBottom: '1px solid var(--border)' }
+const td = { padding: '3px 8px', borderBottom: '1px solid var(--border)' }
+const rowStyle = { background: 'transparent' }
