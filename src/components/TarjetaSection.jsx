@@ -1,124 +1,108 @@
 import React, { useState } from 'react'
 import { Plus, Trash2, ChevronDown, CreditCard } from 'lucide-react'
-import { fmtARS, uid } from '../store'
+import { fmtARS, uid, getTarjetaColor } from '../store'
+import NumInput from './NumInput'
 
-export default function TarjetaSection({ tarjeta, onUpdate, onRemove }) {
+export default function TarjetaSection({ tarjeta, onUpdate, onRemove, debitosAuto = 0 }) {
   const [open, setOpen] = useState(true)
+  const color = getTarjetaColor(tarjeta.nombre)
 
-  const totalCuotas = tarjeta.items.reduce((a, i) => a + (parseFloat(i.monto) || 0), 0)
-  const total = (tarjeta.mantenimiento || 0) + totalCuotas
+  const totalCuotas = (tarjeta.items || []).reduce((a, i) => a + (parseFloat(i.monto) || 0), 0)
+  const totalPropio = (tarjeta.mantenimiento || 0) + totalCuotas
+  const totalConDebitos = totalPropio + debitosAuto
 
   function updateItem(id, field, value) {
-    onUpdate({
-      items: tarjeta.items.map(i => i.id === id ? { ...i, [field]: value } : i)
-    })
+    onUpdate({ items: tarjeta.items.map(i => i.id === id ? { ...i, [field]: value } : i) })
   }
-
   function addItem() {
-    onUpdate({
-      items: [...tarjeta.items, { id: uid(), concepto: '', monto: 0, cuota: '', cuotasTotal: '' }]
-    })
+    onUpdate({ items: [...(tarjeta.items || []), { id: uid(), concepto: '', monto: 0, cuota: '', cuotasRestantes: 0 }] })
   }
+  function removeItem(id) { onUpdate({ items: tarjeta.items.filter(i => i.id !== id) }) }
 
-  function removeItem(id) {
-    onUpdate({ items: tarjeta.items.filter(i => i.id !== id) })
+  function getCuotasRestantes(item) {
+    if (item.cuotasRestantes !== undefined && item.cuotasRestantes !== null) return item.cuotasRestantes
+    const p = (item.cuota || '').split('/')
+    if (p.length === 2) return Math.max(0, parseInt(p[1]) - parseInt(p[0]))
+    return 0
+  }
+  function updateCuota(id, cuotaStr) {
+    const p = cuotaStr.split('/')
+    const restantes = p.length === 2 ? Math.max(0, parseInt(p[1]) - parseInt(p[0])) : 0
+    onUpdate({ items: tarjeta.items.map(i => i.id === id ? { ...i, cuota: cuotaStr, cuotasRestantes: restantes } : i) })
   }
 
   return (
-    <div className="card" style={{ marginBottom: 14 }}>
-      {/* Header colapsable */}
-      <div className="collapse-header" onClick={() => setOpen(o => !o)}>
+    <div style={{ border: `2px solid ${color.bg}`, borderRadius: 12, marginBottom: 14, overflow: 'hidden' }}>
+      <div
+        style={{ background: `linear-gradient(135deg, ${color.bg}ee 0%, ${color.bg}99 100%)`, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+        onClick={() => setOpen(o => !o)}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <CreditCard size={15} style={{ color: 'var(--accent3)' }} />
+          <CreditCard size={16} style={{ color: color.text }} />
           <input
-            className="inline"
-            style={{ width: 'auto', background: 'transparent', border: 'none', fontWeight: 700, fontSize: 15, padding: 0 }}
-            value={tarjeta.nombre}
-            onClick={e => e.stopPropagation()}
+            value={tarjeta.nombre} onClick={e => e.stopPropagation()}
             onChange={e => onUpdate({ nombre: e.target.value })}
+            style={{ background: 'transparent', border: 'none', outline: 'none', fontWeight: 800, fontSize: 15, color: color.text, cursor: 'text', width: 'auto', maxWidth: 160 }}
           />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent3)' }}>{fmtARS(total)}</span>
-          <ChevronDown size={16} className={`collapse-arrow ${open ? 'open' : ''}`} />
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: color.text }}>{fmtARS(totalConDebitos)}</div>
+            {debitosAuto > 0 && <div style={{ fontSize: 11, color: `${color.text}99` }}>propio {fmtARS(totalPropio)} + auto {fmtARS(debitosAuto)}</div>}
+          </div>
+          <ChevronDown size={16} style={{ color: color.text, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
         </div>
       </div>
 
       {open && (
-        <>
-          {/* Mantenimiento */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0 8px', paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
-            <span style={{ fontSize: 13, color: 'var(--text2)', flex: 1 }}>Mantenimiento / cargo fijo</span>
-            <input
-              className="inline"
-              type="number"
-              style={{ width: 120 }}
-              value={tarjeta.mantenimiento || 0}
-              onChange={e => onUpdate({ mantenimiento: parseFloat(e.target.value) || 0 })}
-            />
+        <div style={{ padding: '14px 16px', background: `${color.bg}08` }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10, marginBottom: 10, borderBottom: `1px solid ${color.bg}44` }}>
+            <span style={{ fontSize: 13, color: 'var(--text2)' }}>Mantenimiento / cargo fijo</span>
+            <NumInput value={tarjeta.mantenimiento || 0} onChange={v => onUpdate({ mantenimiento: v })} style={{ width: 120, fontSize: 13 }} />
           </div>
 
-          {/* Items / cuotas */}
-          <div className="items-list">
-            {tarjeta.items.map(item => (
-              <div key={item.id} style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 100px 80px auto',
-                gap: 8,
-                alignItems: 'center',
-                padding: '5px 0',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                <input
-                  className="inline"
-                  value={item.concepto}
-                  placeholder="Concepto"
-                  onChange={e => updateItem(item.id, 'concepto', e.target.value)}
-                />
-                <input
-                  className="inline"
-                  type="number"
-                  value={item.monto}
-                  placeholder="Monto"
-                  onChange={e => updateItem(item.id, 'monto', parseFloat(e.target.value) || 0)}
-                />
-                {/* Etiqueta de cuota */}
-                <input
-                  className="inline"
-                  value={item.cuota || ''}
-                  placeholder="2/6"
-                  style={{ fontSize: 12, textAlign: 'center' }}
-                  title="Cuota actual / total (ej: 2/6)"
-                  onChange={e => updateItem(item.id, 'cuota', e.target.value)}
-                />
-                <button className="btn-icon" onClick={() => removeItem(item.id)}>
-                  <Trash2 size={13} />
-                </button>
+          {(tarjeta.items || []).length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 72px 80px 20px', gap: 6, fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 4, padding: '0 4px' }}>
+                <span>Concepto</span><span style={{ textAlign: 'right' }}>Monto</span><span style={{ textAlign: 'center' }}>Cuota</span><span style={{ textAlign: 'center' }}>Quedan</span><span />
               </div>
-            ))}
-            {tarjeta.items.length === 0 && (
-              <div style={{ color: 'var(--text3)', fontSize: 13, padding: '6px 0' }}>
-                Sin cuotas cargadas
-              </div>
-            )}
-          </div>
+              {tarjeta.items.map(item => {
+                const restantes = getCuotasRestantes(item)
+                return (
+                  <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 72px 80px 20px', gap: 6, alignItems: 'center', padding: '4px 4px', borderBottom: `1px solid ${color.bg}22` }}>
+                    <input className="inline" value={item.concepto} placeholder="Concepto"
+                      style={{ fontSize: 13, background: 'transparent', borderColor: `${color.bg}44` }}
+                      onChange={e => updateItem(item.id, 'concepto', e.target.value)} />
+                    <NumInput value={item.monto || 0} onChange={v => updateItem(item.id, 'monto', v)} style={{ fontSize: 13 }} />
+                    <input className="inline" value={item.cuota || ''} placeholder="2/6"
+                      style={{ fontSize: 12, textAlign: 'center', background: 'transparent', borderColor: `${color.bg}44` }}
+                      onChange={e => updateCuota(item.id, e.target.value)} />
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                        background: restantes === 0 ? 'rgba(34,197,94,.15)' : restantes <= 2 ? 'rgba(245,158,11,.15)' : `${color.bg}33`,
+                        color: restantes === 0 ? 'var(--green)' : restantes <= 2 ? 'var(--yellow)' : color.text }}>
+                        {restantes === 0 ? '✓ última' : `${restantes} más`}
+                      </span>
+                    </div>
+                    <button className="btn-icon" onClick={() => removeItem(item.id)}><Trash2 size={12} /></button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {debitosAuto > 0 && (
+            <div style={{ background: `${color.bg}22`, borderRadius: 6, padding: '8px 10px', marginTop: 8, marginBottom: 4, fontSize: 12, color: color.text, border: `1px dashed ${color.bg}` }}>
+              <span style={{ fontWeight: 600 }}>Débitos automáticos: {fmtARS(debitosAuto)}</span>
+              <span style={{ color: 'var(--text3)', marginLeft: 6 }}>(definidos en Gastos fijos)</span>
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-            <button className="btn-add" onClick={addItem}>
-              <Plus size={14} /> Agregar cuota / compra
-            </button>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Total tarjeta</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent3)' }}>{fmtARS(total)}</div>
-            </div>
+            <button className="btn-add" onClick={addItem}><Plus size={13} /> Agregar cuota / compra</button>
+            <button className="btn btn-danger" style={{ fontSize: 11, padding: '3px 8px' }} onClick={onRemove}><Trash2 size={11} /> Quitar</button>
           </div>
-
-          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
-            <button className="btn btn-danger" style={{ fontSize: 12, padding: '4px 10px' }} onClick={onRemove}>
-              <Trash2 size={12} /> Eliminar tarjeta
-            </button>
-          </div>
-        </>
+        </div>
       )}
     </div>
   )
